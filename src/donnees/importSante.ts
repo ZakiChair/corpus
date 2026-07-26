@@ -197,7 +197,8 @@ const CORRESPONDANCES: Record<string, Correspondance> = {
 
 const FACTEURS_TAILLE: Record<string, number> = { cm: 1, in: 2.54, m: 100, ft: 30.48 }
 
-const ETIQUETTES_SEANCE: Record<string, string> = {
+/** Partagé avec l'import Health Auto Export, qui écrit les mêmes activités. */
+export const ETIQUETTES_SEANCE: Record<string, string> = {
   TraditionalStrengthTraining: 'Musculation',
   FunctionalStrengthTraining: 'Renforcement',
   Running: 'Course',

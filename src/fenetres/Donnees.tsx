@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useStore } from 'zustand'
 import { AVERTISSEMENT, lireCouverture } from '../analyse/lecture'
 import { storeDonnees } from '../core/donneesStore'
 import { useEtat } from '../core/hooks'
@@ -7,9 +8,11 @@ import { bornesGlobales, nombreDePoints, seriesRenseignees, typesPresents } from
 import { diffJours, formaterJourLong } from '../core/temps'
 import { analyserEtat, LIBELLES_ANNOTATION, type EtatCorpus } from '../core/types'
 import { importerAthlos } from '../donnees/importAthlos'
+import { estAutoExport, importerAutoExport } from '../donnees/importAutoExport'
 import { importerCsv } from '../donnees/importCsv'
 import { ImportAnnule, importerSante, type ProgressionSante } from '../donnees/importSante'
-import { Bouton, EnteteFenetre, PiedNote } from '../ui/ui'
+import { storeSync } from '../donnees/syncSante'
+import { Bouton, EnteteFenetre, Etiquette, PiedNote } from '../ui/ui'
 
 /**
  * Fenêtre Données : peupler, exporter, effacer.
@@ -85,11 +88,27 @@ export function Donnees() {
         }
         return
       }
+      if (estAutoExport(brut)) {
+        const r = importerAutoExport(brut)!
+        storeDonnees.getState().fusionner(r.series, r.annotations)
+        setMessage({
+          ton: 'ok',
+          texte: `Export Health Auto Export : ${Object.keys(r.series).length} séries, ${r.annotations.length} séances.`,
+          details: [
+            ...r.avertissements,
+            ...(r.typesIgnores.length > 0
+              ? [`Métriques ignorées : ${r.typesIgnores.map((t) => t.type).join(', ')}.`]
+              : []),
+          ],
+        })
+        return
+      }
       const athlos = importerAthlos(brut)
       if (!athlos) {
         setMessage({
           ton: 'erreur',
-          texte: 'JSON non reconnu : ni une sauvegarde CORPUS, ni un profil ATHLOS.',
+          texte:
+            'JSON non reconnu : ni une sauvegarde CORPUS, ni un profil ATHLOS, ni un export Health Auto Export.',
         })
         return
       }
@@ -300,6 +319,8 @@ export function Donnees() {
           )}
         </Section>
 
+        <SectionSynchronisation />
+
         <Section titre="Sauvegarder">
           <p className="mb-2 text-[11px] leading-relaxed text-attenue">
             Tes données vivent dans le stockage de ce navigateur, sur cette machine. Vider les
@@ -430,6 +451,72 @@ export function Donnees() {
 
       <PiedNote>{AVERTISSEMENT}</PiedNote>
     </div>
+  )
+}
+
+/**
+ * Synchronisation continue : le chemin « live » depuis l'Apple Watch.
+ * La montre → Santé sur l'iPhone → un export automatique déposé dans iCloud
+ * Drive → ce dossier, surveillé ici.
+ */
+function SectionSynchronisation() {
+  const sync = useStore(storeSync)
+
+  return (
+    <Section titre="Synchronisation continue">
+      {sync.phase === 'indisponible' ? (
+        <p className="text-[11px] leading-relaxed text-attenue">
+          La surveillance d’un dossier demande la File System Access API, absente de ce
+          navigateur. Ouvre CORPUS dans un navigateur Chromium (Chrome, Edge, Arc) pour
+          l’activer — l’import manuel ci-dessus fonctionne partout.
+        </p>
+      ) : (
+        <>
+          <p className="mb-2 text-[11px] leading-relaxed text-attenue">
+            Sur l’iPhone, une app d’export automatique (<strong className="text-texte">Health
+            Auto Export</strong>, ou un raccourci planifié) dépose un export JSON ou CSV dans un
+            dossier iCloud Drive. Choisis ce dossier ici : CORPUS le balaye chaque minute et
+            importe les nouveaux fichiers — la montre alimente l’application sans un geste.
+            Dans le Finder, mets le dossier en « Toujours conserver sur ce Mac », sinon iCloud
+            garde les fichiers dans le nuage et la lecture échoue.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {sync.phase === 'actif' ? (
+              <>
+                <Etiquette jeton="--c-favorable">
+                  Surveille « {sync.dossier} »
+                </Etiquette>
+                <Bouton onClick={() => void sync.balayerMaintenant()}>Balayer maintenant</Bouton>
+                <Bouton variante="danger" onClick={() => void sync.oublier()}>
+                  Arrêter
+                </Bouton>
+              </>
+            ) : sync.phase === 'permission' ? (
+              <>
+                <Etiquette jeton="--c-alerte">
+                  « {sync.dossier} » attend une autorisation
+                </Etiquette>
+                <Bouton variante="accent" onClick={() => void sync.reprendre()}>
+                  Reprendre la surveillance
+                </Bouton>
+                <Bouton onClick={() => void sync.oublier()}>Oublier ce dossier</Bouton>
+              </>
+            ) : (
+              <Bouton variante="accent" onClick={() => void sync.choisirDossier()}>
+                Choisir un dossier à surveiller…
+              </Bouton>
+            )}
+          </div>
+          {(sync.dernierBalayage || sync.dernierImport) && (
+            <p className="mt-1.5 text-[10px] text-attenue">
+              {sync.dernierImport ? `Dernier import : ${sync.dernierImport}` : 'Aucun import encore.'}
+              {sync.dernierBalayage ? ` · Dernier balayage : ${sync.dernierBalayage}` : ''}
+            </p>
+          )}
+          {sync.erreur && <p className="mt-1 text-[10px] text-defavorable">{sync.erreur}</p>}
+        </>
+      )}
+    </Section>
   )
 }
 

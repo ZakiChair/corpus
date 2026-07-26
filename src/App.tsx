@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, type ComponentType, type LazyExoticComponent } from 'react'
 import { storeDonnees } from './core/donneesStore'
 import { useFenetres, useHydrate } from './core/hooks'
+import { demarrerSync } from './donnees/syncSante'
 import { BarreOutils } from './shell/BarreOutils'
 import { BarreTaches } from './shell/BarreTaches'
 import { FenetreFlottante } from './shell/FenetreFlottante'
@@ -40,6 +41,10 @@ export function App() {
       // Premier lancement : la fenêtre Données est le seul endroit d'où l'on
       // peut peupler l'application, autant y conduire directement.
       if (storeDonnees.getState().vide) storeFenetres.getState().ouvrir('donnees')
+      // La synchronisation reprend APRÈS l'hydratation : un import qui
+      // arriverait avant fusionnerait dans un état encore vide, aussitôt
+      // écrasé par le chargement du stockage.
+      void demarrerSync()
     })
   }, [])
 
