@@ -95,54 +95,6 @@ Elles ne répondent pas aux questions qu'on se pose réellement :
 Ce sont des questions d'étude d'événement, de corrélation décalée et de percentile
 conditionnel. La finance quantitative les traite depuis quarante ans.
 
-## Décisions qui structurent tout le reste
-
-**Grain journalier.** Une métrique est une suite de `{ jour, valeur }`, au plus un point
-par jour. Les objets d'intérêt — VFC au réveil, poids du matin, durée de sommeil, charge
-d'une séance — sont intrinsèquement journaliers. Descendre à l'intra-journalier
-multiplierait le volume par trois cents sans servir une seule des analyses.
-
-**Convention temporelle.** La ligne du jour J porte la nuit qui s'achève le matin J et
-l'activité de la journée J. Sommeil et VFC sont donc contemporains ; une séance de
-l'après-midi ne se lit que sur la mesure du lendemain. Tous les décalages en découlent.
-
-**Le générateur de démonstration simule un modèle causal, pas du bruit.** Un générateur
-naïf produirait des métriques indépendantes — matrice de corrélation nulle, études
-d'événement plates, régimes constants : l'application paraîtrait cassée alors que le code
-serait juste. Les effets injectés sont déclarés dans `EFFETS` (`src/donnees/generateur.ts`)
-et **retrouvés par les tests des modules d'analyse**, ce qui fait de ce fichier à la fois
-une source de données et le banc d'essai de la couche analytique.
-
-**Descriptif, jamais prescriptif.** Tout le texte généré passe par `src/analyse/lecture.ts`,
-et la règle y tient en une ligne : on décrit la donnée (« VFC à 1,2 σ sous ta normale
-30 j »), on ne recommande jamais de conduite. Corpus n'est pas un dispositif médical.
-
-## Pièges rencontrés, et pourquoi ils comptent
-
-Ces cinq points ont chacun coûté un correctif ; ils sont documentés en commentaire à
-l'endroit concerné.
-
-**Deux conventions différentes portent le nom « EMA ».** `2/(n+1)` est celle des moyennes
-mobiles financières ; la physiologie de l'entraînement (Banister, TrainingPeaks) utilise
-`1/tau`. Pour tau = 7 : 0,25 contre 0,143. Transposer un outil d'un domaine à l'autre
-demande de vérifier les constantes, pas seulement les noms.
-
-**Les décalages fantômes.** Deux séries à forte tendance corrèlent à ~0,95 à *tous* les
-décalages ; prendre l'argmax d'un profil plat revient à tirer au sort puis à présenter le
-tirage comme une découverte causale (« le poids précède la masse grasse de 4 jours »).
-`meilleurDecalage` n'annonce un décalage que si son pic dépasse nettement la valeur
-contemporaine.
-
-**L'utilité n'est pas monotone.** Dormir deux heures de plus que d'habitude n'est pas un
-signe de forme, c'est souvent le contraire. Sans plafond sur la contribution favorable du
-sommeil, le régime composite restait tiède pendant les états qu'il devait signaler.
-
-**Les fenêtres glissantes sont calendaires, pas indicielles.** Sur une série trouée, une
-fenêtre de 30 *points* peut couvrir trois mois.
-
-**Le z-score du jour exclut le jour lui-même.** L'inclure dans sa propre référence amortit
-mécaniquement l'anomalie qu'on cherche à détecter.
-
 ## Import
 
 | Format | État |
