@@ -122,6 +122,25 @@ test('une version future bloque l’édition sans être écrasée', async ({ pag
   await expect(page.getByRole('button', { name: 'Générer 18 mois' })).toHaveCount(0)
 })
 
+test('le dialogue de récupération reçoit le focus', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await ecrireEtatBrut(page, {
+    version: 2,
+    series: {},
+    annotations: [],
+    profil: {},
+    creeLe: '2026-07-26',
+  })
+  await page.reload()
+
+  const dialogue = page.getByRole('alertdialog')
+  await expect(dialogue).toBeVisible()
+  await expect
+    .poll(() => dialogue.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true)
+})
+
 test('deux onglets signalent un conflit au lieu de perdre des données', async ({ context, page }) => {
   await page.goto('/')
   await viderCorpus(page)

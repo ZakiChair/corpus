@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { storeDonnees, type EtatPersistance } from '../core/donneesStore'
 
 interface PropsEcranPersistance {
@@ -5,6 +6,13 @@ interface PropsEcranPersistance {
 }
 
 export function EcranPersistance({ persistance }: PropsEcranPersistance) {
+  const refDialogue = useRef<HTMLElement>(null)
+  const statut = persistance.statut
+
+  useEffect(() => {
+    if (statut !== 'chargement' && statut !== 'pret') refDialogue.current?.focus()
+  }, [statut])
+
   if (persistance.statut === 'chargement') {
     return (
       <div
@@ -66,6 +74,8 @@ export function EcranPersistance({ persistance }: PropsEcranPersistance) {
   return (
     <div className="fixed inset-0 z-[500] grid place-items-center bg-fond/90 p-5 backdrop-blur-sm">
       <section
+        ref={refDialogue}
+        tabIndex={-1}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="titre-persistance"
