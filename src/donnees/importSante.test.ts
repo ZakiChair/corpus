@@ -225,6 +225,47 @@ describe('sommeil traversant minuit', () => {
   })
 })
 
+describe('pas venant de plusieurs appareils', () => {
+  function exportPas(lignes: string[]): string {
+    return `<HealthData>\n${lignes.join('\n')}\n</HealthData>`
+  }
+  const pas = (source: string, heure: string, valeur: number) =>
+    ` <Record type="HKQuantityTypeIdentifierStepCount" sourceName="${source}" unit="count" startDate="2026-07-25 ${heure}:00 +0200" endDate="2026-07-25 ${heure}:59 +0200" value="${valeur}"/>`
+
+  it('retient la source dominante du jour au lieu d’additionner les appareils', () => {
+    // La montre et le téléphone comptent les MÊMES pas chacun de leur côté :
+    // additionner les deux donnerait 11 000 pour une journée de 7 000.
+    const r = lireTout(exportPas([pas('Apple Watch', '08:00', 5000), pas('Apple Watch', '14:00', 2000), pas('iPhone', '08:10', 4000)]))
+    expect(valeurAuJour(r.series.pas!, '2026-07-25')).toBe(7000)
+    expect(r.avertissements.join(' ')).toContain('source')
+  })
+
+  it('ne tronque pas la somme d’une journée à plus de 512 enregistrements', () => {
+    // Un couple montre + téléphone produit facilement des centaines
+    // d'enregistrements de pas par jour : la somme doit rester exacte.
+    const lignes = Array.from({ length: 600 }, () => pas('Apple Watch', '08:00', 10))
+    const r = lireTout(exportPas(lignes))
+    expect(valeurAuJour(r.series.pas!, '2026-07-25')).toBe(6000)
+  })
+})
+
+describe('réveils nocturnes', () => {
+  it('ignore les micro-éveils de moins de deux minutes', () => {
+    // La montre segmente une nuit réelle en dizaines de micro-éveils de
+    // quelques secondes ; les compter tous ferait rejeter la série entière
+    // par les bornes du catalogue (max 15).
+    const nuit = `<HealthData>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" value="HKCategoryValueSleepAnalysisAsleepCore" startDate="2026-07-24 23:00:00 +0200" endDate="2026-07-25 02:00:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" value="HKCategoryValueSleepAnalysisAwake" startDate="2026-07-25 02:00:00 +0200" endDate="2026-07-25 02:00:40 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" value="HKCategoryValueSleepAnalysisAwake" startDate="2026-07-25 02:01:00 +0200" endDate="2026-07-25 02:16:00 +0200"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" value="HKCategoryValueSleepAnalysisAsleepCore" startDate="2026-07-25 02:16:00 +0200" endDate="2026-07-25 07:00:00 +0200"/>
+</HealthData>`
+    const r = lireTout(nuit)
+    // Seul le réveil de quinze minutes compte ; celui de quarante secondes non.
+    expect(valeurAuJour(r.series.sommeil_reveils!, '2026-07-25')).toBe(1)
+  })
+})
+
 describe('masse grasse : décision d’échelle sur tout le fichier', () => {
   function exportAvecMasseGrasse(valeurs: string[]): string {
     const lignes = valeurs

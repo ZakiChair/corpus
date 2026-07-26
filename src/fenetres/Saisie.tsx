@@ -25,6 +25,19 @@ import { Bouton, EnteteFenetre, PiedNote } from '../ui/ui'
 
 const SAISISSABLES = metriquesSaisissables()
 
+/**
+ * La saisie manuelle est le chemin d'entrée le plus exposé aux fautes de
+ * frappe (745 au lieu de 74,5), et les attributs HTML min/max n'empêchent
+ * rien au clavier. Les bornes du catalogue — déjà appliquées aux imports —
+ * valent donc ici aussi.
+ */
+function valeurInvalide(def: DefinitionMetrique, texte: string): boolean {
+  const t = texte.trim()
+  if (t === '') return false
+  const v = Number(t.replace(',', '.'))
+  return !Number.isFinite(v) || v < def.min || v > def.max
+}
+
 export function Saisie() {
   const etat = useEtat()
   const [jour, setJour] = useState(() => aujourdhui())
@@ -64,6 +77,7 @@ export function Saisie() {
   }
 
   const nbRemplis = Object.values(brouillon).filter((v) => v.trim() !== '').length
+  const invalides = SAISISSABLES.filter((m) => valeurInvalide(m, brouillon[m.id] ?? ''))
   const parFamille = [...new Set(SAISISSABLES.map((m) => m.famille))].map((f) => ({
     famille: f,
     metriques: SAISISSABLES.filter((m) => m.famille === f),
@@ -114,6 +128,7 @@ export function Saisie() {
                   definition={m}
                   valeurExistante={existant[m.id]}
                   brouillon={brouillon[m.id] ?? ''}
+                  invalide={valeurInvalide(m, brouillon[m.id] ?? '')}
                   onChange={(v) => {
                     setBrouillon((b) => ({ ...b, [m.id]: v }))
                     setEnregistre(false)
@@ -126,10 +141,22 @@ export function Saisie() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 border-t border-bord px-3 py-2">
-        <Bouton variante="accent" onClick={enregistrer} desactive={nbRemplis === 0}>
+        <Bouton
+          variante="accent"
+          onClick={enregistrer}
+          desactive={nbRemplis === 0 || invalides.length > 0}
+        >
           Enregistrer{nbRemplis > 0 ? ` (${nbRemplis})` : ''}
         </Bouton>
-        {enregistre && <span className="text-[11px] text-favorable">Enregistré.</span>}
+        {invalides.length > 0 ? (
+          <span className="text-[11px] text-defavorable">
+            {invalides.length > 1
+              ? `${invalides.length} valeurs hors bornes`
+              : `${invalides[0]!.abrege} : hors bornes (${invalides[0]!.min} – ${invalides[0]!.max})`}
+          </span>
+        ) : (
+          enregistre && <span className="text-[11px] text-favorable">Enregistré.</span>
+        )}
       </div>
 
       <PiedNote>{AVERTISSEMENT}</PiedNote>
@@ -141,11 +168,13 @@ function Champ({
   definition,
   valeurExistante,
   brouillon,
+  invalide,
   onChange,
 }: {
   definition: DefinitionMetrique
   valeurExistante: number | undefined
   brouillon: string
+  invalide: boolean
   onChange: (v: string) => void
 }) {
   const aide =
@@ -175,10 +204,14 @@ function Champ({
               : String(valeurExistante)
         }
         onChange={(e) => onChange(e.target.value)}
-        className={`w-[84px] rounded border bg-fond px-1.5 py-1 text-right text-[12px] tabular-nums outline-none focus:border-accent ${
-          valeurExistante !== undefined && brouillon === ''
-            ? 'border-bord text-attenue'
-            : 'border-bord text-texte'
+        className={`w-[84px] rounded border bg-fond px-1.5 py-1 text-right text-[12px] tabular-nums outline-none ${
+          invalide
+            ? 'border-defavorable text-defavorable focus:border-defavorable'
+            : `focus:border-accent ${
+                valeurExistante !== undefined && brouillon === ''
+                  ? 'border-bord text-attenue'
+                  : 'border-bord text-texte'
+              }`
         }`}
       />
       <span className="w-8 shrink-0 text-[10px] text-attenue">{definition.unite}</span>

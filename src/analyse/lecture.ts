@@ -1,5 +1,5 @@
 import { definitionOuGenerique, formaterValeur } from '../core/metriques'
-import { formaterJourLong, type Jour } from '../core/temps'
+import { formaterJourLong, jourVersIndex, type Jour } from '../core/temps'
 import type { Serie } from '../core/types'
 import { bandeDuRegime, type Contribution } from './regime'
 import { mediane, rangPercentile } from './stats'
@@ -60,9 +60,9 @@ export function lireRegime(composite: number, dominante?: Contribution): string 
 }
 
 /** « −0,9 kg sur 30 jours » — quantifie une pente, sans la juger. */
-export function lireTendance(pentteParJour: number, id: string, jours = 30): string {
-  if (!Number.isFinite(pentteParJour)) return 'tendance indéterminée'
-  const total = pentteParJour * jours
+export function lireTendance(penteParJour: number, id: string, jours = 30): string {
+  if (!Number.isFinite(penteParJour)) return 'tendance indéterminée'
+  const total = penteParJour * jours
   const def = definitionOuGenerique(id)
   if (Math.abs(total) < 10 ** -def.decimales / 2) return `stable sur ${jours} jours`
   const signe = total > 0 ? '+' : '−'
@@ -96,11 +96,21 @@ export function lireMetrique(
   }
 }
 
-/** Écart de la valeur du jour à la médiane des N derniers jours, en unité brute. */
+/**
+ * Écart de la valeur du jour à la médiane des N derniers JOURS, en unité brute.
+ * La fenêtre est calendaire, pas indicielle : sur une métrique hebdomadaire
+ * (composition corporelle), 30 points couvriraient sept mois et « vs médiane »
+ * comparerait à une autre saison.
+ */
 export function ecartAMediane(serie: Serie, jours: number): number {
   if (serie.length === 0) return Number.NaN
   const dernier = serie[serie.length - 1]!
-  const recents = serie.slice(-jours - 1, -1).map((p) => p.v)
+  const fin = jourVersIndex(dernier.j)
+  const recents: number[] = []
+  for (const p of serie) {
+    const i = jourVersIndex(p.j)
+    if (i >= fin - jours && i < fin) recents.push(p.v)
+  }
   if (recents.length < 3) return Number.NaN
   return dernier.v - mediane(recents)
 }

@@ -217,12 +217,23 @@ const ETIQUETTES_SEANCE: Record<string, string> = {
   Boxing: 'Boxe',
 }
 
-/** Un jour de mesure ne garde que ses N premières valeurs, pour rester borné. */
+/**
+ * Un jour de mesure ne garde que ses N premières valeurs, pour rester borné.
+ * Ne concerne que les modes médiane et dernier : les sommes s'accumulent au
+ * fil de l'eau et ne passent jamais par une liste.
+ */
 const MAX_VALEURS_PAR_JOUR = 512
 /** Écart maximal entre deux segments pour qu'ils appartiennent à la même nuit. */
 const ECART_MEME_NUIT_MS = 60 * 60 * 1000
 /** Durée minimale d'une session pour qu'elle définisse une heure de coucher. */
 const DUREE_MIN_NUIT_H = 2
+/**
+ * Durée minimale d'un segment « éveil » pour compter comme réveil nocturne.
+ * La montre segmente une nuit réelle en dizaines de micro-éveils de quelques
+ * secondes : les compter tous ferait rejeter la série entière par les bornes
+ * du catalogue, et personne n'appelle « réveil » quarante secondes d'agitation.
+ */
+const DUREE_MIN_EVEIL_MS = 2 * 60 * 1000
 
 /* ————————————————————————— Lecteur incrémental ————————————————————————— */
 
@@ -259,6 +270,13 @@ export function creerLecteurSante(): LecteurSante {
   const ignores = new Map<string, number>()
   /** id → jour → valeurs brutes (facteur d'unité déjà appliqué). */
   const brut = new Map<string, Map<Jour, number[]>>()
+  /**
+   * id → jour → source → total, pour les modes « somme ». Accumuler au fil de
+   * l'eau plutôt que stocker la liste : tronquer à MAX_VALEURS_PAR_JOUR
+   * fausserait la somme d'une journée active. Le détail par source sert au
+   * dédoublonnage : iPhone et Apple Watch comptent chacun les mêmes pas.
+   */
+  const sommes = new Map<string, Map<Jour, Map<string, number>>>()
   const segments: SegmentSommeil[] = []
   const seances: { jour: Jour; etiquette: string; minutes: number }[] = []
   const avertissements: string[] = []
@@ -277,6 +295,20 @@ export function creerLecteurSante(): LecteurSante {
     // Les N PREMIÈRES valeurs, pas un échantillon aléatoire : le résultat doit
     // être reproductible d'un import à l'autre.
     else if (liste.length < MAX_VALEURS_PAR_JOUR) liste.push(valeur)
+  }
+
+  function ajouterSomme(id: string, jour: Jour, source: string, valeur: number): void {
+    let parJour = sommes.get(id)
+    if (!parJour) {
+      parJour = new Map()
+      sommes.set(id, parJour)
+    }
+    let parSource = parJour.get(jour)
+    if (!parSource) {
+      parSource = new Map()
+      parJour.set(jour, parSource)
+    }
+    parSource.set(source, (parSource.get(source) ?? 0) + valeur)
   }
 
   function traiterRecord(a: Record<string, string>): void {
@@ -334,7 +366,8 @@ export function creerLecteurSante(): LecteurSante {
       if (f === undefined) return
       valeur = v * f
     }
-    ajouter(corr.id, horodatage.jour, valeur)
+    if (corr.mode === 'somme') ajouterSomme(corr.id, horodatage.jour, a.sourceName ?? '', valeur)
+    else ajouter(corr.id, horodatage.jour, valeur)
     retenus++
   }
 
@@ -409,12 +442,7 @@ export function creerLecteurSante(): LecteurSante {
       const points: { j: Jour; v: number }[] = []
       for (const [jour, liste] of parJour) {
         if (liste.length === 0) continue
-        let v =
-          mode === 'somme'
-            ? liste.reduce((s, x) => s + x, 0)
-            : mode === 'dernier'
-              ? liste[liste.length - 1]!
-              : mediane(liste)
+        let v = mode === 'dernier' ? liste[liste.length - 1]! : mediane(liste)
         if (id === 'masse_grasse') v *= facteurMasseGrasse
         if (!Number.isFinite(v)) continue
         // Les bornes du catalogue écartent les conversions manifestement ratées.
@@ -422,6 +450,31 @@ export function creerLecteurSante(): LecteurSante {
         points.push({ j: jour, v })
       }
       if (points.length > 0) series[id] = normaliserSerie(points)
+    }
+
+    /* — Modes « somme » : la source dominante du jour, pas le total des sources — */
+    let joursMultiSources = 0
+    for (const [id, parJour] of sommes) {
+      const def = definitionMetrique(id)
+      const points: { j: Jour; v: number }[] = []
+      for (const [jour, parSource] of parJour) {
+        // L'app Santé dédoublonne les appareils par priorité de source ;
+        // additionner les sources recompterait deux fois les mêmes pas.
+        // Retenir la source la plus fournie du jour peut légèrement
+        // sous-estimer, jamais doubler.
+        let v = 0
+        for (const total of parSource.values()) v = Math.max(v, total)
+        if (parSource.size > 1) joursMultiSources++
+        if (!Number.isFinite(v)) continue
+        if (def && (v < def.min || v > def.max)) continue
+        points.push({ j: jour, v })
+      }
+      if (points.length > 0) series[id] = normaliserSerie(points)
+    }
+    if (joursMultiSources > 0) {
+      avertissements.push(
+        `Plusieurs appareils comptaient les mêmes pas : la source la plus fournie de chaque jour a été retenue (${joursMultiSources} jour${joursMultiSources > 1 ? 's' : ''} concerné${joursMultiSources > 1 ? 's' : ''}).`,
+      )
     }
 
     /* — Sommeil : regroupement en nuits — */
@@ -576,7 +629,9 @@ export function regrouperNuits(segments: readonly SegmentSommeil[]): Nuit[] {
       dureeH: Math.round(dureeH * 100) / 100,
       profondH: Math.round(profondH * 100) / 100,
       coucher: Math.round(coucher * 100) / 100,
-      reveils: groupe.filter((s) => s.categorie === 'eveil').length,
+      reveils: groupe.filter(
+        (s) => s.categorie === 'eveil' && s.finMs - s.debutMs >= DUREE_MIN_EVEIL_MS,
+      ).length,
       depuisAuLit,
     }
   })

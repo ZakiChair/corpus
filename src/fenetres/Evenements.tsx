@@ -274,6 +274,12 @@ export function Evenements() {
               Sur {reponse.nEvenements} occurrences, aucun écart ne se distingue du bruit.
             </span>
           )}
+          {reponse.nContamines > 0 && (
+            <span className="ml-2 text-attenue">
+              Ligne de base contaminée pour {reponse.nContamines} occurrence
+              {reponse.nContamines > 1 ? 's' : ''} (événements trop rapprochés).
+            </span>
+          )}
         </div>
       )}
 
@@ -288,9 +294,9 @@ export function Evenements() {
       <PiedNote>
         Écart {unite ? `en ${unite} ` : ''}à la moyenne des quatre jours précédant chaque
         occurrence ; bande = intervalle de confiance à 95 %. Point plein quand l’intervalle exclut
-        zéro. Les occurrences rapprochées se chevauchent : un événement qui revient à jour fixe
-        chaque semaine réimprime son propre rythme dans la courbe, et fait alterner les écarts
-        d’un jour sur l’autre. Monter le seuil d’intensité ne retient que les occurrences les plus
+        zéro. Les jours suivant de près une autre occurrence sont exclus de la ligne de base ;
+        quand les occurrences sont trop denses pour qu'il en reste, la base contaminée est
+        utilisée et signalée. Monter le seuil d’intensité ne retient que les occurrences les plus
         marquées et donne souvent une lecture plus nette. {AVERTISSEMENT}
       </PiedNote>
     </div>

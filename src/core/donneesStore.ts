@@ -52,6 +52,7 @@ function estVide(etat: EtatCorpus): boolean {
 }
 
 let minuteur: ReturnType<typeof setTimeout> | undefined
+let etatEnAttente: EtatCorpus | undefined
 
 /**
  * Enregistrement différé : la saisie d'un curseur peut produire des dizaines
@@ -59,9 +60,38 @@ let minuteur: ReturnType<typeof setTimeout> | undefined
  */
 function enregistrerPlusTard(etat: EtatCorpus): void {
   if (minuteur !== undefined) clearTimeout(minuteur)
+  etatEnAttente = etat
   minuteur = setTimeout(() => {
+    minuteur = undefined
+    etatEnAttente = undefined
     void stockage.enregistrer(etat)
   }, 400)
+}
+
+/** Annule une écriture différée encore armée, sans l'exécuter. */
+function annulerEcritureEnAttente(): void {
+  if (minuteur !== undefined) clearTimeout(minuteur)
+  minuteur = undefined
+  etatEnAttente = undefined
+}
+
+/**
+ * Écrit immédiatement ce qui attendait son délai. Sans cela, saisir une valeur
+ * puis fermer l'onglet dans les 400 ms perdrait l'écriture.
+ */
+export function purgerEcritureEnAttente(): void {
+  const etat = etatEnAttente
+  annulerEcritureEnAttente()
+  if (etat) void stockage.enregistrer(etat)
+}
+
+if (typeof window !== 'undefined') {
+  // `pagehide` couvre la fermeture et la navigation ; `visibilitychange`
+  // couvre l'onglet mis en arrière-plan, seul signal fiable sur mobile.
+  window.addEventListener('pagehide', purgerEcritureEnAttente)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') purgerEcritureEnAttente()
+  })
 }
 
 function muter(
@@ -147,6 +177,9 @@ export const storeDonnees = createStore<EtatStore>((set, get) => ({
   },
 
   reinitialiser: () => {
+    // Un enregistrement différé encore armé ré-écrirait l'ancien état APRÈS
+    // l'effacement : on le désamorce d'abord.
+    annulerEcritureEnAttente()
     const etat = etatVide(aujourdhui())
     set({ etat, vide: true })
     void stockage.effacer()

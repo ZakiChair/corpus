@@ -5,7 +5,7 @@ import { useEtat } from '../core/hooks'
 import { definitionOuGenerique } from '../core/metriques'
 import { bornesGlobales, nombreDePoints, seriesRenseignees, typesPresents } from '../core/series'
 import { diffJours, formaterJourLong } from '../core/temps'
-import { LIBELLES_ANNOTATION } from '../core/types'
+import { analyserEtat, LIBELLES_ANNOTATION, type EtatCorpus } from '../core/types'
 import { importerAthlos } from '../donnees/importAthlos'
 import { importerCsv } from '../donnees/importCsv'
 import { ImportAnnule, importerSante, type ProgressionSante } from '../donnees/importSante'
@@ -26,6 +26,8 @@ export function Donnees() {
   const etat = useEtat()
   const [message, setMessage] = useState<Message | null>(null)
   const [confirmationEffacement, setConfirmationEffacement] = useState(false)
+  /** Sauvegarde CORPUS lue mais pas encore appliquée : l'écrasement se confirme. */
+  const [restauration, setRestauration] = useState<EtatCorpus | null>(null)
   const [progression, setProgression] = useState<ProgressionSante | null>(null)
   const [survolDepot, setSurvolDepot] = useState(false)
   const refFichier = useRef<HTMLInputElement>(null)
@@ -64,8 +66,23 @@ export function Donnees() {
         'series' in brut &&
         'version' in brut
       ) {
-        storeDonnees.getState().remplacer(brut as never)
-        setMessage({ ton: 'ok', texte: 'Sauvegarde CORPUS restaurée.' })
+        const etatLu = analyserEtat(brut)
+        if (!etatLu) {
+          setMessage({
+            ton: 'erreur',
+            texte: 'Ce fichier ressemble à une sauvegarde CORPUS mais sa forme n’est pas lisible.',
+          })
+          return
+        }
+        if (storeDonnees.getState().vide) {
+          storeDonnees.getState().remplacer(etatLu)
+          setMessage({ ton: 'ok', texte: 'Sauvegarde CORPUS restaurée.' })
+        } else {
+          // « Je regarde ce qu'il y a dans ce vieux backup » ne doit pas
+          // pouvoir détruire six mois de saisie : l'écrasement se confirme.
+          setRestauration(etatLu)
+          setMessage(null)
+        }
         return
       }
       const athlos = importerAthlos(brut)
@@ -317,6 +334,42 @@ export function Donnees() {
             )}
           </div>
         </Section>
+
+        {restauration && (
+          <div className="rounded border border-alerte px-2.5 py-2 text-[11px] leading-relaxed">
+            <p className="text-alerte">
+              Cette sauvegarde contient {nombreDePoints(restauration).toLocaleString('fr-CH')}{' '}
+              points ; tes données actuelles en comptent{' '}
+              {nombreDePoints(etat).toLocaleString('fr-CH')}. Remplacer les efface toutes ;
+              fusionner conserve l’existant et n’écrase que les jours communs.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              <Bouton
+                variante="danger"
+                onClick={() => {
+                  storeDonnees.getState().remplacer(restauration)
+                  setRestauration(null)
+                  setMessage({ ton: 'avert', texte: 'Sauvegarde restaurée : les données précédentes ont été remplacées.' })
+                }}
+              >
+                Remplacer
+              </Bouton>
+              <Bouton
+                variante="accent"
+                onClick={() => {
+                  storeDonnees
+                    .getState()
+                    .fusionner(restauration.series, restauration.annotations, restauration.profil)
+                  setRestauration(null)
+                  setMessage({ ton: 'ok', texte: 'Sauvegarde fusionnée avec les données existantes.' })
+                }}
+              >
+                Fusionner
+              </Bouton>
+              <Bouton onClick={() => setRestauration(null)}>Annuler</Bouton>
+            </div>
+          </div>
+        )}
 
         {message && (
           <div

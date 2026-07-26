@@ -1,4 +1,4 @@
-import { decalerJour, type Jour } from '../core/temps'
+import { decalerJour, jourVersIndex, type Jour } from '../core/temps'
 import type { Serie } from '../core/types'
 import { ecartType, moyenne, valeurAuJour } from './stats'
 
@@ -26,6 +26,11 @@ export interface ReponseEvenement {
   nEvenements: number
   /** Occurrences écartées faute de mesures avant l'événement. */
   nEcartes: number
+  /**
+   * Occurrences dont la ligne de base contient des jours encore sous l'effet
+   * d'une autre occurrence (événements trop rapprochés pour faire mieux).
+   */
+  nContamines: number
 }
 
 export interface OptionsEtude {
@@ -33,6 +38,16 @@ export interface OptionsEtude {
   apres?: number
   /** Mesures minimales dans la fenêtre antérieure pour établir la ligne de base. */
   minimumBase?: number
+  /**
+   * Quarantaine : un jour de ligne de base situé à moins de ce nombre de jours
+   * APRÈS une autre occurrence porte encore l'effet de celle-ci — pour des
+   * séances trois fois par semaine, la « base » d'une séance est faite des
+   * lendemains des précédentes, et l'effet mesuré s'auto-annule. Ces jours
+   * sont exclus de la base. Quand il ne reste rien de propre (occurrences trop
+   * denses), on se replie sur la base contaminée et on le SIGNALE via
+   * `nContamines` plutôt que d'écarter l'occurrence.
+   */
+  exclusionApresAutre?: number
 }
 
 export function etudeEvenement(
@@ -40,26 +55,46 @@ export function etudeEvenement(
   joursEvenement: readonly Jour[],
   options: OptionsEtude = {},
 ): ReponseEvenement {
-  const { avant = 3, apres = 7, minimumBase = 2 } = options
+  const { avant = 3, apres = 7, minimumBase = 2, exclusionApresAutre = 2 } = options
   const decalages: number[] = []
   for (let d = -avant; d <= apres; d++) decalages.push(d)
+
+  // Jours encore sous l'influence d'une occurrence : le jour même et les
+  // `exclusionApresAutre` jours qui suivent. Comme la ligne de base d'un
+  // événement est strictement antérieure à lui, il ne se met jamais lui-même
+  // en quarantaine.
+  const quarantaine = new Set<number>()
+  for (const e of joursEvenement) {
+    const i0 = jourVersIndex(e)
+    for (let d = 0; d <= exclusionApresAutre; d++) quarantaine.add(i0 + d)
+  }
 
   const seaux = decalages.map<number[]>(() => [])
   let nEvenements = 0
   let nEcartes = 0
+  let nContamines = 0
 
   for (const e of joursEvenement) {
     // Ligne de base : les jours qui PRÉCÈDENT strictement l'événement.
     const base: number[] = []
+    const baseAvecContamines: number[] = []
     for (let d = -avant; d <= -1; d++) {
-      const v = valeurAuJour(serie, decalerJour(e, d))
-      if (v !== undefined) base.push(v)
+      const jourBase = decalerJour(e, d)
+      const v = valeurAuJour(serie, jourBase)
+      if (v === undefined) continue
+      baseAvecContamines.push(v)
+      if (!quarantaine.has(jourVersIndex(jourBase))) base.push(v)
     }
-    if (base.length < minimumBase) {
+    let retenue = base
+    if (retenue.length < minimumBase && baseAvecContamines.length > base.length) {
+      retenue = baseAvecContamines
+      if (retenue.length >= minimumBase) nContamines++
+    }
+    if (retenue.length < minimumBase) {
       nEcartes++
       continue
     }
-    const niveauBase = moyenne(base)
+    const niveauBase = moyenne(retenue)
     nEvenements++
     for (let k = 0; k < decalages.length; k++) {
       const v = valeurAuJour(serie, decalerJour(e, decalages[k]!))
@@ -86,7 +121,7 @@ export function etudeEvenement(
     demiIC.push(Number.isFinite(erreurType) ? 1.96 * erreurType : undefined)
   }
 
-  return { decalages, moyenne: moyennes, demiIC, effectifs, nEvenements, nEcartes }
+  return { decalages, moyenne: moyennes, demiIC, effectifs, nEvenements, nEcartes, nContamines }
 }
 
 /**

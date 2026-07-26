@@ -19,61 +19,110 @@ export interface AdaptateurStockage {
 }
 
 const NOM_BASE = 'corpus'
-const NOM_MAGASIN = 'etat'
+/** v2 : ajout du magasin `sync` (poignée du dossier surveillé, fichiers vus). */
+const VERSION_BASE = 2
+const MAGASINS = ['etat', 'sync'] as const
+type Magasin = (typeof MAGASINS)[number]
+
+const NOM_MAGASIN: Magasin = 'etat'
 const CLE = 'courant'
+/**
+ * Copie de l'état brut qu'une version future n'aurait pas su relire. Sans
+ * elle, un blob jugé illisible serait écrasé par la première mutation d'un
+ * état vide — la perte serait silencieuse et définitive.
+ */
+const CLE_SECOURS = 'secours'
 
 function ouvrir(): Promise<IDBDatabase> {
   return new Promise((resoudre, rejeter) => {
-    const demande = indexedDB.open(NOM_BASE, 1)
+    const demande = indexedDB.open(NOM_BASE, VERSION_BASE)
     demande.onupgradeneeded = () => {
       const db = demande.result
-      if (!db.objectStoreNames.contains(NOM_MAGASIN)) db.createObjectStore(NOM_MAGASIN)
+      for (const magasin of MAGASINS) {
+        if (!db.objectStoreNames.contains(magasin)) db.createObjectStore(magasin)
+      }
     }
     demande.onsuccess = () => resoudre(demande.result)
     demande.onerror = () => rejeter(demande.error)
   })
 }
 
+/* ————————————— Accès générique clé-valeur, partagé avec la sync ————————————— */
+
+export async function lireCle(magasin: Magasin, cle: string): Promise<unknown> {
+  const db = await ouvrir()
+  try {
+    return await new Promise<unknown>((resoudre, rejeter) => {
+      const demande = db.transaction(magasin, 'readonly').objectStore(magasin).get(cle)
+      demande.onsuccess = () => resoudre(demande.result)
+      demande.onerror = () => rejeter(demande.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
+export async function ecrireCle(magasin: Magasin, cle: string, valeur: unknown): Promise<void> {
+  const db = await ouvrir()
+  try {
+    await new Promise<void>((resoudre, rejeter) => {
+      const tx = db.transaction(magasin, 'readwrite')
+      tx.objectStore(magasin).put(valeur, cle)
+      tx.oncomplete = () => resoudre()
+      tx.onerror = () => rejeter(tx.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
+export async function supprimerCle(magasin: Magasin, cle: string): Promise<void> {
+  const db = await ouvrir()
+  try {
+    await new Promise<void>((resoudre, rejeter) => {
+      const tx = db.transaction(magasin, 'readwrite')
+      tx.objectStore(magasin).delete(cle)
+      tx.oncomplete = () => resoudre()
+      tx.onerror = () => rejeter(tx.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
+/* —————————————————————————— L'état de l'application —————————————————————————— */
+
 class StockageIndexedDB implements AdaptateurStockage {
   async charger(): Promise<EtatCorpus | null> {
     try {
-      const db = await ouvrir()
-      const brut = await new Promise<unknown>((resoudre, rejeter) => {
-        const tx = db.transaction(NOM_MAGASIN, 'readonly')
-        const demande = tx.objectStore(NOM_MAGASIN).get(CLE)
-        demande.onsuccess = () => resoudre(demande.result)
-        demande.onerror = () => rejeter(demande.error)
-      })
-      db.close()
+      const brut = await lireCle(NOM_MAGASIN, CLE)
       if (brut === undefined) return null
-      // Une donnée illisible — écrite par une version antérieure ou corrompue —
-      // vaut mieux ignorée qu'un plantage au démarrage.
-      return analyserEtat(brut)
+      const etat = analyserEtat(brut)
+      if (etat === null) {
+        // Une donnée illisible vaut mieux ignorée qu'un plantage au démarrage —
+        // mais copiée d'abord : la première mutation de l'état vide qui suivra
+        // écraserait sinon la seule trace des données. La copie n'écrase jamais
+        // un secours existant.
+        try {
+          if ((await lireCle(NOM_MAGASIN, CLE_SECOURS)) === undefined) {
+            await ecrireCle(NOM_MAGASIN, CLE_SECOURS, brut)
+          }
+        } catch {
+          // Best effort : ne pas empêcher le démarrage.
+        }
+      }
+      return etat
     } catch {
       return null
     }
   }
 
-  async enregistrer(etat: EtatCorpus): Promise<void> {
-    const db = await ouvrir()
-    await new Promise<void>((resoudre, rejeter) => {
-      const tx = db.transaction(NOM_MAGASIN, 'readwrite')
-      tx.objectStore(NOM_MAGASIN).put(etat, CLE)
-      tx.oncomplete = () => resoudre()
-      tx.onerror = () => rejeter(tx.error)
-    })
-    db.close()
+  enregistrer(etat: EtatCorpus): Promise<void> {
+    return ecrireCle(NOM_MAGASIN, CLE, etat)
   }
 
-  async effacer(): Promise<void> {
-    const db = await ouvrir()
-    await new Promise<void>((resoudre, rejeter) => {
-      const tx = db.transaction(NOM_MAGASIN, 'readwrite')
-      tx.objectStore(NOM_MAGASIN).delete(CLE)
-      tx.oncomplete = () => resoudre()
-      tx.onerror = () => rejeter(tx.error)
-    })
-    db.close()
+  effacer(): Promise<void> {
+    return supprimerCle(NOM_MAGASIN, CLE)
   }
 }
 
