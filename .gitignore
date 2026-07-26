@@ -5,3 +5,4 @@ dist
 /captures/
 test-results/
 playwright-report/
+/.worktrees/
