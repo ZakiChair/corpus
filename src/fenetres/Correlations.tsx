@@ -6,7 +6,7 @@ import {
   type Methode,
 } from '../analyse/correlation'
 import { AVERTISSEMENT } from '../analyse/lecture'
-import { useEtat } from '../core/hooks'
+import { useEtat, useMemoRefs } from '../core/hooks'
 import { definitionOuGenerique } from '../core/metriques'
 import { serieAnalyse, seriesRenseignees } from '../core/series'
 import type { Serie } from '../core/types'
@@ -44,17 +44,21 @@ export function Correlations() {
   const refCanvas = useRef<HTMLCanvasElement>(null)
   const pointeur = usePointeurCanvas(refCanvas)
 
-  const ids = useMemo(
+  const idsCalcules = useMemo(
     // Une corrélation sur une douzaine de points n'apprend rien et encombre.
     () => seriesRenseignees(etat).filter((id) => (etat.series[id]?.length ?? 0) >= POINTS_MINIMUM),
     [etat],
   )
+  // Identité stable tant que la LISTE ne change pas : la matrice (210 paires
+  // de Spearman) ne doit pas se recalculer à chaque frappe dans SAIS.
+  const ids = useMemoRefs(() => idsCalcules, [idsCalcules.join('|')])
 
-  const series = useMemo(() => {
+  const series = useMemoRefs(() => {
     const out: Record<string, Serie> = {}
     for (const id of ids) out[id] = serieAnalyse(etat, id)
     return out
-  }, [etat, ids])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, ...ids.map((id) => etat.series[id])])
 
   const matrice = useMemo(
     () => matriceCorrelation(series, ids, decalage, methode),

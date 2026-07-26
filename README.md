@@ -10,7 +10,8 @@ Tout est local. Aucun compte, aucune synchronisation, aucun appel réseau.
 ```bash
 npm install
 npm run dev        # http://localhost:5230
-npm test           # 197 tests
+npm test           # tests unitaires (Vitest)
+npm run test:e2e   # parcours navigateur (Playwright)
 npm run build
 ```
 
@@ -41,14 +42,23 @@ la barre de titre : agrandir.
 
 | | | |
 |---|---|---|
-| `BLAN` | Bilan | État composite du jour, une tuile par métrique : valeur, z-score, rang percentile, courbe miniature |
+| `BLAN` | Bilan | État composite du jour, une tuile par métrique : valeur, z-score (brut ET conditionné au jour de semaine), rang percentile |
+| `SIGN` | Signaux | Ce qui est inhabituel en ce moment : écarts à 2 σ, records, changements de palier, charge hors habitude |
 | `SERI` | Séries | Graphe multi-métriques, zoom et panoramique, repères d'événements |
 | `LOAD` | Charge | Charge aiguë et chronique, forme, ratio aigu/chronique, monotonie |
+| `COMP` | Comparaison | Ce bloc vs le précédent : écart des médianes de toutes les métriques, avec intervalle |
 | `CORR` | Corrélations | Matrice décalée : qui précède quoi, et de combien de jours |
 | `EVTS` | Événements | Réponse moyenne d'une métrique autour d'un type d'événement |
-| `SAIS` | Saisie | Saisie manuelle du jour |
+| `HYPO` | Hypothèses | « Les jours où X est dans son quart bas, que vaut Y le lendemain ? » |
+| `SAIS` | Saisie | Saisie manuelle du jour, bornée par le catalogue |
 | `ANNO` | Journal | Événements datés : séances, sorties, voyages, maladies |
-| `DONN` | Données | Import, génération de démonstration, export, effacement |
+| `DONN` | Données | Import, synchronisation, sauvegarde, démonstration, effacement |
+
+Les fenêtres se répondent : une tuile de BLAN, une relation de CORR, une ligne de SIGN ou
+de COMP, un événement d'ANNO ouvrent SERI déjà réglée sur la chose cliquée ; le jour
+survolé dans SERI se trace dans LOAD, et inversement. `⌥←` / `⌥→` / `⌥↑` ancrent la
+fenêtre au premier plan, `⌥↓` la restaure ; le menu Fenêtres enregistre des dispositions
+nommées, rappelables à la palette. L'application s'installe en PWA et s'ouvre hors ligne.
 
 ## Décisions qui structurent tout le reste
 
@@ -119,6 +129,13 @@ uniquement. Dans le Finder, garder le dossier en « Toujours conserver sur ce Ma
 sinon iCloud garde les fichiers dans le nuage et la lecture échoue. Une sauvegarde
 CORPUS déposée dans ce dossier n'est jamais appliquée automatiquement.
 
+### Sauvegarde automatique
+
+Depuis `DONN` → Sauvegarder, « Copier chaque jour vers un dossier » écrit une copie JSON
+quotidienne (un fichier par jour, rotation sur deux semaines) dans un dossier choisi —
+un dossier iCloud Drive donne une sauvegarde hors machine sans aucun serveur. Le fichier
+du jour est réécrit toutes les heures.
+
 Les dates ambiguës sont lues **jour avant mois** (convention européenne) : `03/12/2026`
 est le 3 décembre.
 
@@ -134,10 +151,11 @@ en `.zip`.
 centaines de mégaoctets ; la lecture est écrite en flux pour cette raison, mais le premier
 import réel reste à faire.
 
-Ce que l'import récupère : VFC, fréquence au repos, poids, masse grasse, tour de taille,
-pas, les quatre métriques de sommeil, les séances, et le profil (naissance, sexe, taille).
-Les types non pris en charge — la fréquence cardiaque instantanée surtout, de loin la plus
-volumineuse — sont comptés puis ignorés, et la fenêtre le signale.
+Ce que l'import récupère : VFC, fréquence au repos, FC nocturne (le minimum entre minuit
+et 8 h, résumé de la fréquence cardiaque instantanée), température du poignet, fréquence
+respiratoire, VO₂max estimé, poids, masse grasse, tour de taille, pas, les quatre
+métriques de sommeil, les séances, et le profil (naissance, sexe, taille). Les types non
+pris en charge sont comptés puis ignorés, et la fenêtre le signale.
 
 Quatre conventions à connaître :
 
@@ -159,11 +177,14 @@ Quatre conventions à connaître :
 ```
 src/
   core/        temps, métriques, types, séries, stockage, store
-  analyse/     stats, alignement, corrélation, charge, événement, régime, lecture
-  donnees/     générateur causal, imports (Apple Santé, CSV, ATHLOS), lecture ZIP
-  shell/       registre, gestionnaire de fenêtres, fenêtre flottante, palette, thème
+  analyse/     stats, alignement, corrélation, charge, événement, régime,
+               saisonnalité, ruptures, comparaison, lecture
+  donnees/     générateur causal, imports (Apple Santé, Health Auto Export, CSV,
+               ATHLOS), lecture ZIP, synchronisation, sauvegarde automatique
+  shell/       registre, gestionnaire de fenêtres, intentions, palette, thème
   ui/          domaine d'axe, zoom, jetons canvas, composants partagés
   fenetres/    une par mnémonique
+e2e/           parcours Playwright dans le vrai navigateur
 ```
 
 `IdFenetre` et `IdMetrique` sont **dérivés** de leurs registres via `as const satisfies` :

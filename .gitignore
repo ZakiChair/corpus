@@ -3,3 +3,5 @@ dist
 .DS_Store
 *.local
 captures
+test-results/
+playwright-report/

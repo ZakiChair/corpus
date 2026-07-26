@@ -4,7 +4,7 @@ import { AVERTISSEMENT, lireEcart } from '../analyse/lecture'
 import { bandeDuRegime, calculerRegime, contributionDominante } from '../analyse/regime'
 import { ruptureRecente } from '../analyse/ruptures'
 import { rangPercentile, zScoreGlissant } from '../analyse/stats'
-import { useEtat } from '../core/hooks'
+import { useEtat, useMemoRefs } from '../core/hooks'
 import { definitionOuGenerique, formaterValeur } from '../core/metriques'
 import { serie as lireSerie, serieAnalyse, seriesRenseignees } from '../core/series'
 import { formaterJourCourt, type Jour } from '../core/temps'
@@ -35,8 +35,11 @@ const POINTS_MINIMUM = 30
 
 export function Signaux() {
   const etat = useEtat()
+  const idsRenseignes = useMemo(() => seriesRenseignees(etat), [etat])
 
-  const signaux = useMemo<Signal[]>(() => {
+  // Les détecteurs (ruptures surtout) sont lourds : ils ne se refont que
+  // quand une série a réellement changé, pas à chaque mutation d'état.
+  const signaux = useMemoRefs<Signal[]>(() => {
     const out: Signal[] = []
 
     /* — État composite — */
@@ -55,7 +58,7 @@ export function Signaux() {
     }
 
     /* — Par métrique : écart, record, rupture — */
-    for (const id of seriesRenseignees(etat)) {
+    for (const id of idsRenseignes) {
       const s = lireSerie(etat, id)
       if (s.length < POINTS_MINIMUM) continue
       const def = definitionOuGenerique(id)
@@ -127,7 +130,7 @@ export function Signaux() {
 
     // Les alertes d'abord ; à niveau égal, l'ordre de détection suffit.
     return out.sort((a, b) => (a.niveau === b.niveau ? 0 : a.niveau === 'alerte' ? -1 : 1))
-  }, [etat])
+  }, [idsRenseignes.join('|'), ...idsRenseignes.map((id) => etat.series[id])])
 
   const ouvrirSignal = (s: Signal) => {
     if (s.metrique) {

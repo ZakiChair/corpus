@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { AVERTISSEMENT } from '../analyse/lecture'
 import { storeDonnees, TYPES_SAISISSABLES } from '../core/donneesStore'
-import { useEtat } from '../core/hooks'
-import { aujourdhui, formaterJourLong } from '../core/temps'
+import { useAujourdhui, useEtat } from '../core/hooks'
+import { formaterJourLong } from '../core/temps'
 import { COULEURS_ANNOTATION, LIBELLES_ANNOTATION, type TypeAnnotation } from '../core/types'
 import { storeIntentions } from '../shell/intentions'
 import { Bouton, EnteteFenetre, Etiquette, PiedNote, Selecteur, Vide } from '../ui/ui'
@@ -17,8 +17,9 @@ import { Bouton, EnteteFenetre, Etiquette, PiedNote, Selecteur, Vide } from '../
 
 export function Journal() {
   const etat = useEtat()
+  const ajd = useAujourdhui()
   const [filtre, setFiltre] = useState<TypeAnnotation | 'tous'>('tous')
-  const [jour, setJour] = useState(() => aujourdhui())
+  const [jour, setJour] = useState(ajd)
   const [type, setType] = useState<TypeAnnotation>('seance')
   const [note, setNote] = useState('')
   const [intensite, setIntensite] = useState(0.6)

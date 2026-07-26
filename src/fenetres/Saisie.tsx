@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AVERTISSEMENT } from '../analyse/lecture'
 import { valeurAuJour } from '../analyse/stats'
 import { storeDonnees } from '../core/donneesStore'
-import { useEtat } from '../core/hooks'
+import { useAujourdhui, useEtat } from '../core/hooks'
 import {
   formaterHeureCoucher,
   LIBELLES_FAMILLE,
@@ -10,7 +10,7 @@ import {
   type DefinitionMetrique,
 } from '../core/metriques'
 import { serie as lireSerie } from '../core/series'
-import { aujourdhui, decalerJour, formaterJourLong } from '../core/temps'
+import { decalerJour, formaterJourLong } from '../core/temps'
 import { Bouton, EnteteFenetre, PiedNote } from '../ui/ui'
 
 /**
@@ -40,9 +40,20 @@ function valeurInvalide(def: DefinitionMetrique, texte: string): boolean {
 
 export function Saisie() {
   const etat = useEtat()
-  const [jour, setJour] = useState(() => aujourdhui())
+  const ajd = useAujourdhui()
+  const [jour, setJour] = useState(ajd)
   const [brouillon, setBrouillon] = useState<Record<string, string>>({})
   const [enregistre, setEnregistre] = useState(false)
+
+  // À minuit, une fenêtre restée sur « aujourd'hui » suit le changement de
+  // date — mais une date choisie à la main est respectée.
+  const refAncienAjd = useRef(ajd)
+  useEffect(() => {
+    if (refAncienAjd.current !== ajd) {
+      if (jour === refAncienAjd.current) setJour(ajd)
+      refAncienAjd.current = ajd
+    }
+  }, [ajd, jour])
 
   // Valeurs déjà connues pour ce jour : le brouillon les surcharge.
   const existant = useMemo(() => {
@@ -97,21 +108,21 @@ export function Saisie() {
         <input
           type="date"
           value={jour}
-          max={aujourdhui()}
+          max={ajd}
           onChange={(e) => e.target.value && changerJour(e.target.value)}
           className="rounded border border-bord bg-fond px-1.5 py-0.5 text-[12px] text-texte outline-none focus:border-accent"
         />
         <button
           type="button"
           onClick={() => changerJour(decalerJour(jour, 1))}
-          disabled={jour >= aujourdhui()}
+          disabled={jour >= ajd}
           className="rounded border border-bord px-1.5 text-attenue hover:text-texte disabled:opacity-30"
           aria-label="Jour suivant"
         >
           ›
         </button>
         <span className="ml-auto text-[11px] text-attenue">
-          {jour === aujourdhui() ? 'aujourd’hui' : formaterJourLong(jour)}
+          {jour === ajd ? 'aujourd’hui' : formaterJourLong(jour)}
         </span>
       </EnteteFenetre>
 

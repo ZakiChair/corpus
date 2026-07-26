@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { comparerPeriodes, fenetresAdjacentes } from '../analyse/comparaison'
 import { AVERTISSEMENT } from '../analyse/lecture'
-import { useEtat } from '../core/hooks'
+import { useEtat, useMemoRefs } from '../core/hooks'
 import { definitionOuGenerique, formaterHeureCoucher, formaterValeur } from '../core/metriques'
 import { bornesGlobales, serieAnalyse, seriesRenseignees } from '../core/series'
 import { formaterJourCourt } from '../core/temps'
@@ -32,17 +32,20 @@ export function ComparaisonPeriodes() {
   const bornes = bornesGlobales(etat)
   const fin = 'fin' in bornes ? bornes.fin : undefined
 
-  const lignes = useMemo(() => {
+  const idsRenseignes = useMemo(() => seriesRenseignees(etat), [etat])
+  // Un bootstrap de 500 tirages par métrique : à ne refaire que quand une
+  // série, la fenêtre ou la fin de l'historique change réellement.
+  const lignes = useMemoRefs(() => {
     if (!fin) return []
     const { ancienne, recente } = fenetresAdjacentes(fin, jours)
-    return seriesRenseignees(etat).map((id) => ({
+    return idsRenseignes.map((id) => ({
       id,
       def: definitionOuGenerique(id),
       ecart: comparerPeriodes(serieAnalyse(etat, id), ancienne, recente),
       ancienne,
       recente,
     }))
-  }, [etat, fin, jours])
+  }, [fin, jours, idsRenseignes.join('|'), ...idsRenseignes.map((id) => etat.series[id])])
 
   if (!fin || lignes.length === 0) {
     return (
