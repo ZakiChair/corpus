@@ -26,6 +26,20 @@ describe('document stocké', () => {
     })
   })
 
+  it('lit la version racine d’un document futur même s’il possède un champ etat', () => {
+    const brut = {
+      ...etatVide(JOUR),
+      version: VERSION_ETAT + 1,
+      etat: { nouveauFormat: true },
+    }
+
+    expect(decoderValeurStockee(brut)).toEqual({
+      statut: 'incompatible',
+      version: VERSION_ETAT + 1,
+      brut,
+    })
+  })
+
   it('distingue un document corrompu d’une base absente', () => {
     expect(decoderValeurStockee({ version: VERSION_ETAT })).toMatchObject({ statut: 'corrompu' })
     expect(decoderValeurStockee(undefined)).toEqual({ statut: 'absent', revision: 0 })
@@ -38,5 +52,48 @@ describe('document stocké', () => {
       ConflitStockage,
     )
     expect((await stockage.charger()).statut).toBe('charge')
+  })
+
+  it.each([Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    'classe la révision non sûre %s comme corrompue',
+    (revision) => {
+      const brut = { format: 1, revision, etat: etatVide(JOUR) }
+
+      expect(decoderValeurStockee(brut)).toEqual({ statut: 'corrompu', brut })
+    },
+  )
+
+  it('refuse d’enregistrer au-delà de la révision maximale sans mutation', async () => {
+    const document = {
+      format: 1 as const,
+      revision: Number.MAX_SAFE_INTEGER,
+      etat: etatVide(JOUR),
+    }
+    const stockage = new StockageMemoire(document)
+
+    await expect(
+      stockage.enregistrer({ ...etatVide(JOUR), profil: { sexe: 'f' } }, document.revision),
+    ).rejects.toBeInstanceOf(RangeError)
+    expect(await stockage.charger()).toEqual({
+      statut: 'charge',
+      revision: document.revision,
+      etat: document.etat,
+    })
+  })
+
+  it('refuse d’effacer au-delà de la révision maximale sans mutation', async () => {
+    const document = {
+      format: 1 as const,
+      revision: Number.MAX_SAFE_INTEGER,
+      etat: etatVide(JOUR),
+    }
+    const stockage = new StockageMemoire(document)
+
+    await expect(stockage.effacer(document.revision)).rejects.toBeInstanceOf(RangeError)
+    expect(await stockage.charger()).toEqual({
+      statut: 'charge',
+      revision: document.revision,
+      etat: document.etat,
+    })
   })
 })

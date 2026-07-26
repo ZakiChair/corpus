@@ -31,7 +31,7 @@ export function EcranPersistance({ persistance }: PropsEcranPersistance) {
   switch (persistance.statut) {
     case 'erreur-lecture':
       titre = 'Lecture impossible'
-      explication = `Le stockage local n’a pas pu être lu : ${persistance.message}`
+      explication = 'Le stockage local n’a pas pu être lu. Aucune donnée n’a été effacée.'
       break
     case 'document-corrompu':
       titre = 'Document de données illisible'
@@ -44,7 +44,8 @@ export function EcranPersistance({ persistance }: PropsEcranPersistance) {
       break
     case 'erreur-ecriture':
       titre = 'Enregistrement impossible'
-      explication = `L’état visible reste disponible en mémoire, mais son enregistrement a échoué : ${persistance.message}`
+      explication =
+        'L’enregistrement n’a pas abouti. Aucune donnée n’a été effacée ; l’état visible reste disponible en mémoire.'
       break
     case 'conflit':
       titre = 'Conflit entre onglets'

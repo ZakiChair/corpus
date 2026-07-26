@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { creerStoreDonnees } from './donneesStore'
-import { StockageMemoire, type AdaptateurStockage } from './stockage'
+import {
+  StockageMemoire,
+  stockage as stockageNavigateur,
+  type AdaptateurStockage,
+} from './stockage'
 import type { Jour } from './temps'
 import { etatVide } from './types'
 
@@ -31,6 +35,15 @@ describe('hydratation du store', () => {
   it('ne transforme pas une panne de lecture en état vide éditable', async () => {
     const store = creerStoreDonnees(adaptateurEnErreur())
     await store.getState().hydrater()
+    expect(store.getState().persistance).toMatchObject({ statut: 'erreur-lecture' })
+    expect(store.getState().hydrate).toBe(false)
+  })
+
+  it('reste bloqué quand IndexedDB est absent du navigateur', async () => {
+    const store = creerStoreDonnees(stockageNavigateur)
+
+    await store.getState().hydrater()
+
     expect(store.getState().persistance).toMatchObject({ statut: 'erreur-lecture' })
     expect(store.getState().hydrate).toBe(false)
   })
@@ -245,6 +258,22 @@ describe('file d’écriture et effacement', () => {
     expect(resultat.statut === 'charge' && resultat.etat.series.energie?.[0]?.v).toBe(5)
   })
 
+  it('refuse de ressusciter un état v1 effacé par un autre store', async () => {
+    const historique = etatVide(JOUR)
+    historique.series.energie = [{ j: JOUR, v: 4 }]
+    const stockage = new StockageMemoire(historique)
+    const premier = creerStoreDonnees(stockage, { delaiEcritureMs: 0 })
+    const second = creerStoreDonnees(stockage, { delaiEcritureMs: 0 })
+    await Promise.all([premier.getState().hydrater(), second.getState().hydrater()])
+
+    expect(await premier.getState().reinitialiser()).toBe(true)
+    second.getState().poserMesure('energie', JOUR, 9)
+    await second.getState().purgerEcritureEnAttente()
+
+    expect(second.getState().persistance).toEqual({ statut: 'conflit' })
+    expect(await stockage.charger()).toEqual({ statut: 'absent', revision: 1 })
+  })
+
   it('arrête la file après un échec d’écriture', async () => {
     const enregistrer = vi.fn().mockRejectedValue(new Error('quota'))
     const stockage: AdaptateurStockage = {
@@ -338,6 +367,6 @@ describe('file d’écriture et effacement', () => {
     terminerEffacement()
     expect(await effacement).toBe(true)
     await store.getState().purgerEcritureEnAttente()
-    expect(await memoire.charger()).toEqual({ statut: 'absent', revision: 0 })
+    expect(await memoire.charger()).toEqual({ statut: 'absent', revision: 2 })
   })
 })

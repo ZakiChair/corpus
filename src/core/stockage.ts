@@ -18,8 +18,14 @@ export interface DocumentStocke {
   etat: EtatCorpus
 }
 
+interface TombstoneStocke {
+  format: 1
+  revision: number
+  supprime: true
+}
+
 export type ResultatChargement =
-  | { statut: 'absent'; revision: 0 }
+  | { statut: 'absent'; revision: number }
   | { statut: 'charge'; etat: EtatCorpus; revision: number }
   | { statut: 'corrompu'; brut: unknown }
   | { statut: 'incompatible'; brut: unknown; version: number }
@@ -31,17 +37,47 @@ export class ConflitStockage extends Error {
   }
 }
 
-function versionDeclaree(brut: unknown): number | undefined {
-  if (typeof brut !== 'object' || brut === null) return undefined
-  const candidat = 'etat' in brut ? brut.etat : brut
+function versionObjet(candidat: unknown): number | undefined {
   if (typeof candidat !== 'object' || candidat === null || !('version' in candidat)) return undefined
   return typeof candidat.version === 'number' && Number.isInteger(candidat.version)
     ? candidat.version
     : undefined
 }
 
-export function decoderValeurStockee(brut: unknown): ResultatChargement {
-  if (brut === undefined) return { statut: 'absent', revision: 0 }
+function versionDeclaree(brut: unknown): number | undefined {
+  const racine = versionObjet(brut)
+  if (racine !== undefined) return racine
+  if (
+    typeof brut === 'object' &&
+    brut !== null &&
+    'format' in brut &&
+    brut.format === 1 &&
+    'etat' in brut
+  ) {
+    return versionObjet(brut.etat)
+  }
+  return undefined
+}
+
+interface EntreeStockee {
+  presente: boolean
+  valeur: unknown
+}
+
+function revisionValide(revision: unknown): revision is number {
+  return Number.isSafeInteger(revision) && (revision as number) >= 0
+}
+
+function incrementerRevision(revision: number): number {
+  const suivante = revision + 1
+  if (!revisionValide(suivante)) {
+    throw new RangeError('La révision stockée ne peut plus être incrémentée.')
+  }
+  return suivante
+}
+
+function decoderEntreeStockee({ presente, valeur: brut }: EntreeStockee): ResultatChargement {
+  if (!presente) return { statut: 'absent', revision: 0 }
 
   if (
     typeof brut === 'object' &&
@@ -49,8 +85,21 @@ export function decoderValeurStockee(brut: unknown): ResultatChargement {
     'format' in brut &&
     brut.format === 1 &&
     'revision' in brut &&
-    typeof brut.revision === 'number' &&
-    brut.revision >= 0 &&
+    revisionValide(brut.revision) &&
+    !('etat' in brut) &&
+    'supprime' in brut &&
+    brut.supprime === true
+  ) {
+    return { statut: 'absent', revision: brut.revision }
+  }
+
+  if (
+    typeof brut === 'object' &&
+    brut !== null &&
+    'format' in brut &&
+    brut.format === 1 &&
+    'revision' in brut &&
+    revisionValide(brut.revision) &&
     'etat' in brut
   ) {
     const etat = analyserEtat(brut.etat)
@@ -66,6 +115,10 @@ export function decoderValeurStockee(brut: unknown): ResultatChargement {
   }
 
   return { statut: 'corrompu', brut }
+}
+
+export function decoderValeurStockee(brut: unknown): ResultatChargement {
+  return decoderEntreeStockee({ presente: brut !== undefined, valeur: brut })
 }
 
 export interface AdaptateurStockage {
@@ -205,21 +258,70 @@ function modifierEtatAtomiquement<T>(
   )
 }
 
+function lireEntreeDansMagasin(
+  magasin: IDBObjectStore,
+  cle: string,
+  terminer: (entree: EntreeStockee) => void,
+  echouer: (erreur: unknown) => void,
+): void {
+  const lecture = magasin.get(cle)
+  const presence = magasin.count(cle)
+  let valeurLue = false
+  let presenceLue = false
+
+  const terminerSiComplet = () => {
+    if (valeurLue && presenceLue) {
+      terminer({ presente: presence.result > 0, valeur: lecture.result })
+    }
+  }
+  lecture.onerror = () => echouer(lecture.error)
+  presence.onerror = () => echouer(presence.error)
+  lecture.onsuccess = () => {
+    valeurLue = true
+    terminerSiComplet()
+  }
+  presence.onsuccess = () => {
+    presenceLue = true
+    terminerSiComplet()
+  }
+}
+
+async function lireEntreeEtat(cle: string): Promise<EntreeStockee> {
+  const db = await ouvrir()
+  try {
+    return await new Promise<EntreeStockee>((resoudre, rejeter) => {
+      const tx = db.transaction(NOM_MAGASIN, 'readonly')
+      let entree: EntreeStockee | undefined
+      lireEntreeDansMagasin(tx.objectStore(NOM_MAGASIN), cle, (resultat) => {
+        entree = resultat
+      }, rejeter)
+      tx.oncomplete = () => {
+        if (entree === undefined) {
+          rejeter(new Error('Lecture IndexedDB incomplète.'))
+          return
+        }
+        resoudre(entree)
+      }
+      tx.onerror = () => rejeter(tx.error)
+      tx.onabort = () => rejeter(tx.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
 /* —————————————————————————— L'état de l'application —————————————————————————— */
 
 class StockageIndexedDB implements AdaptateurStockage {
   async charger(): Promise<ResultatChargement> {
-    const brut = await lireCle(NOM_MAGASIN, CLE)
-    const resultat = decoderValeurStockee(brut)
+    const resultat = decoderEntreeStockee(await lireEntreeEtat(CLE))
     if (resultat.statut === 'corrompu' || resultat.statut === 'incompatible') {
       try {
         await modifierEtatAtomiquement<void>((magasin, terminer, echouer) => {
-          const lecture = magasin.get(CLE_SECOURS)
-          lecture.onerror = () => echouer(lecture.error)
-          lecture.onsuccess = () => {
-            if (lecture.result === undefined) magasin.put(resultat.brut, CLE_SECOURS)
+          lireEntreeDansMagasin(magasin, CLE_SECOURS, (secours) => {
+            if (!secours.presente) magasin.put(resultat.brut, CLE_SECOURS)
             terminer()
-          }
+          }, echouer)
         })
       } catch {
         // Best effort : ne pas empêcher le démarrage.
@@ -229,12 +331,10 @@ class StockageIndexedDB implements AdaptateurStockage {
   }
 
   async enregistrer(etat: EtatCorpus, revisionAttendue: number): Promise<number> {
-    const revisionSuivante = revisionAttendue + 1
+    const revisionSuivante = incrementerRevision(revisionAttendue)
     await modifierEtatAtomiquement((magasin, terminer, echouer) => {
-      const lecture = magasin.get(CLE)
-      lecture.onerror = () => echouer(lecture.error)
-      lecture.onsuccess = () => {
-        const courant = decoderValeurStockee(lecture.result)
+      lireEntreeDansMagasin(magasin, CLE, (entree) => {
+        const courant = decoderEntreeStockee(entree)
         if (
           (courant.statut !== 'absent' && courant.statut !== 'charge') ||
           courant.revision !== revisionAttendue
@@ -244,17 +344,16 @@ class StockageIndexedDB implements AdaptateurStockage {
         }
         magasin.put({ format: 1, revision: revisionSuivante, etat } satisfies DocumentStocke, CLE)
         terminer(revisionSuivante)
-      }
+      }, echouer)
     })
     return revisionSuivante
   }
 
   async effacer(revisionAttendue: number): Promise<number> {
+    const revisionSuivante = incrementerRevision(revisionAttendue)
     await modifierEtatAtomiquement((magasin, terminer, echouer) => {
-      const lecture = magasin.get(CLE)
-      lecture.onerror = () => echouer(lecture.error)
-      lecture.onsuccess = () => {
-        const courant = decoderValeurStockee(lecture.result)
+      lireEntreeDansMagasin(magasin, CLE, (entree) => {
+        const courant = decoderEntreeStockee(entree)
         if (
           (courant.statut !== 'absent' && courant.statut !== 'charge') ||
           courant.revision !== revisionAttendue
@@ -262,17 +361,24 @@ class StockageIndexedDB implements AdaptateurStockage {
           echouer(new ConflitStockage())
           return
         }
-        magasin.delete(CLE)
-        terminer(0)
-      }
+        magasin.put(
+          { format: 1, revision: revisionSuivante, supprime: true } satisfies TombstoneStocke,
+          CLE,
+        )
+        terminer(revisionSuivante)
+      }, echouer)
     })
-    return 0
+    return revisionSuivante
   }
 }
 
-/** Repli en mémoire, pour les tests et les contextes sans IndexedDB. */
+/** Adaptateur en mémoire réservé à l’injection explicite dans les tests. */
 export class StockageMemoire implements AdaptateurStockage {
-  private valeur: unknown = undefined
+  private valeur: unknown
+
+  constructor(valeur: unknown = undefined) {
+    this.valeur = valeur
+  }
 
   charger(): Promise<ResultatChargement> {
     return Promise.resolve(decoderValeurStockee(this.valeur))
@@ -286,7 +392,12 @@ export class StockageMemoire implements AdaptateurStockage {
     ) {
       return Promise.reject(new ConflitStockage())
     }
-    const revisionSuivante = revisionAttendue + 1
+    let revisionSuivante: number
+    try {
+      revisionSuivante = incrementerRevision(revisionAttendue)
+    } catch (erreur) {
+      return Promise.reject(erreur)
+    }
     this.valeur = { format: 1, revision: revisionSuivante, etat } satisfies DocumentStocke
     return Promise.resolve(revisionSuivante)
   }
@@ -299,10 +410,26 @@ export class StockageMemoire implements AdaptateurStockage {
     ) {
       return Promise.reject(new ConflitStockage())
     }
-    this.valeur = undefined
-    return Promise.resolve(0)
+    let revisionSuivante: number
+    try {
+      revisionSuivante = incrementerRevision(revisionAttendue)
+    } catch (erreur) {
+      return Promise.reject(erreur)
+    }
+    this.valeur = {
+      format: 1,
+      revision: revisionSuivante,
+      supprime: true,
+    } satisfies TombstoneStocke
+    return Promise.resolve(revisionSuivante)
   }
 }
 
+const stockageIndisponible: AdaptateurStockage = {
+  charger: () => Promise.reject(new Error('IndexedDB est indisponible.')),
+  enregistrer: () => Promise.reject(new Error('IndexedDB est indisponible.')),
+  effacer: () => Promise.reject(new Error('IndexedDB est indisponible.')),
+}
+
 export const stockage: AdaptateurStockage =
-  typeof indexedDB === 'undefined' ? new StockageMemoire() : new StockageIndexedDB()
+  typeof indexedDB === 'undefined' ? stockageIndisponible : new StockageIndexedDB()

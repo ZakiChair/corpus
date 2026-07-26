@@ -26,8 +26,8 @@ async function viderCorpus(page: Page): Promise<void> {
   })
 }
 
-async function ecrireEtatBrut(page: Page, valeur: unknown): Promise<void> {
-  await page.evaluate(async (brut) => {
+async function ecrireCleEtatBrute(page: Page, cle: string, valeur: unknown): Promise<void> {
+  await page.evaluate(async ({ cle, brut }) => {
     const db = await new Promise<IDBDatabase>((resoudre, rejeter) => {
       const demande = indexedDB.open('corpus', 2)
       demande.onupgradeneeded = () => {
@@ -44,7 +44,7 @@ async function ecrireEtatBrut(page: Page, valeur: unknown): Promise<void> {
     try {
       await new Promise<void>((resoudre, rejeter) => {
         const transaction = db.transaction('etat', 'readwrite')
-        transaction.objectStore('etat').put(brut, 'courant')
+        transaction.objectStore('etat').put(brut, cle)
         transaction.oncomplete = () => resoudre()
         transaction.onerror = () => rejeter(transaction.error)
         transaction.onabort = () => rejeter(transaction.error)
@@ -52,7 +52,40 @@ async function ecrireEtatBrut(page: Page, valeur: unknown): Promise<void> {
     } finally {
       db.close()
     }
-  }, valeur)
+  }, { cle, brut: valeur })
+}
+
+async function ecrireEtatBrut(page: Page, valeur: unknown): Promise<void> {
+  await ecrireCleEtatBrute(page, 'courant', valeur)
+}
+
+async function lireCleEtatBrute(
+  page: Page,
+  cle: string,
+): Promise<{ presente: boolean; typeValeur: string }> {
+  return page.evaluate(async (cleLue) => {
+    const db = await new Promise<IDBDatabase>((resoudre, rejeter) => {
+      const demande = indexedDB.open('corpus', 2)
+      demande.onsuccess = () => resoudre(demande.result)
+      demande.onerror = () => rejeter(demande.error)
+    })
+    try {
+      return await new Promise<{ presente: boolean; typeValeur: string }>(
+        (resoudre, rejeter) => {
+          const transaction = db.transaction('etat', 'readonly')
+          const magasin = transaction.objectStore('etat')
+          const lecture = magasin.get(cleLue)
+          const presence = magasin.count(cleLue)
+          transaction.oncomplete = () =>
+            resoudre({ presente: presence.result > 0, typeValeur: typeof lecture.result })
+          transaction.onerror = () => rejeter(transaction.error)
+          transaction.onabort = () => rejeter(transaction.error)
+        },
+      )
+    } finally {
+      db.close()
+    }
+  }, cle)
 }
 
 async function lireEtatBrut(page: Page): Promise<EtatBrut | undefined> {
@@ -160,6 +193,60 @@ test('deux onglets signalent un conflit au lieu de perdre des données', async (
 
   const documentApresConflit = await lireEtatBrut(page)
   expect(documentApresConflit).toEqual(documentAvantConflit)
+})
+
+test('une valeur undefined présente sous courant reste un document corrompu', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await ecrireEtatBrut(page, undefined)
+  await page.reload()
+
+  await expect(page.getByRole('alertdialog')).toContainText('illisible')
+  expect(await lireCleEtatBrute(page, 'courant')).toEqual({
+    presente: true,
+    typeValeur: 'undefined',
+  })
+})
+
+test('le CAS IndexedDB ne remplace pas une valeur undefined présente', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await page.reload()
+  const generer = page.getByRole('button', { name: 'Générer 18 mois' })
+  await expect(generer).toBeVisible()
+
+  await ecrireEtatBrut(page, undefined)
+  await generer.click()
+
+  await expect(page.getByRole('alertdialog')).toContainText('autre onglet')
+  expect(await lireCleEtatBrute(page, 'courant')).toEqual({
+    presente: true,
+    typeValeur: 'undefined',
+  })
+})
+
+test('un secours présent valant undefined n’est pas écrasé', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await ecrireCleEtatBrute(page, 'secours', undefined)
+  await ecrireEtatBrut(page, { version: 1 })
+  await page.reload()
+
+  await expect(page.getByRole('alertdialog')).toContainText('illisible')
+  expect(await lireCleEtatBrute(page, 'secours')).toEqual({
+    presente: true,
+    typeValeur: 'undefined',
+  })
+})
+
+test('confirme un effacement seulement après sa réussite', async ({ page }) => {
+  await demarrerAvecDemo(page)
+  const donnees = fenetre(page, 'Données')
+
+  await donnees.getByRole('button', { name: 'Tout effacer' }).click()
+  await donnees.getByRole('button', { name: 'Confirmer l’effacement' }).click()
+
+  await expect(donnees).toContainText('Toutes les données ont été effacées.')
 })
 
 test('premier lancement, démonstration, et toutes les fenêtres à leur taille par défaut', async ({ page }) => {

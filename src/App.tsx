@@ -69,7 +69,9 @@ export function App() {
     void demarrerSauvegardeAuto()
   }, [statutPersistance])
 
-  const bloqueShell = statutPersistance === 'erreur-ecriture' || statutPersistance === 'conflit'
+  const effacementEnCours = statutPersistance === 'chargement' && servicesDemarres.current
+  const bloqueShell =
+    effacementEnCours || statutPersistance === 'erreur-ecriture' || statutPersistance === 'conflit'
   if (statutPersistance !== 'pret' && !bloqueShell) {
     return <EcranPersistance persistance={persistance} />
   }
