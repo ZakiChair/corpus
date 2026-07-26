@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDonneesVide, useTheme } from '../core/hooks'
-import { storeFenetres } from './gestionnaireFenetres'
+import {
+  appliquerDispositionNommee,
+  enregistrerDispositionNommee,
+  lireDispositionsNommees,
+  storeFenetres,
+  supprimerDispositionNommee,
+} from './gestionnaireFenetres'
 import { REGISTRE_FENETRES } from './registre'
 import { LIBELLES_THEME, storeTheme, THEMES } from './theme'
 
@@ -41,7 +47,12 @@ export function BarreOutils() {
 
 function MenuFonctions() {
   const [ouvert, setOuvert] = useState(false)
+  const [dispositions, setDispositions] = useState<string[]>([])
   const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (ouvert) setDispositions(Object.keys(lireDispositionsNommees()))
+  }, [ouvert])
 
   useEffect(() => {
     if (!ouvert) return
@@ -83,6 +94,50 @@ function MenuFonctions() {
               </span>
             </button>
           ))}
+
+          <div className="border-t border-bord">
+            {dispositions.map((nom) => (
+              <div key={nom} className="group flex items-center transition-colors hover:bg-bord/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    appliquerDispositionNommee(nom)
+                    setOuvert(false)
+                  }}
+                  className="flex min-w-0 flex-1 items-baseline gap-2 px-2.5 py-1.5 text-left"
+                >
+                  <span className="w-11 shrink-0 text-[10px] uppercase tracking-wider text-attenue">
+                    dispo
+                  </span>
+                  <span className="truncate text-[12px] text-texte">{nom}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Supprimer la disposition ${nom}`}
+                  onClick={() => {
+                    supprimerDispositionNommee(nom)
+                    setDispositions((d) => d.filter((x) => x !== nom))
+                  }}
+                  className="shrink-0 px-2 text-[11px] text-attenue opacity-0 transition-opacity hover:text-defavorable group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const nom = window.prompt('Nom de la disposition (fenêtres et positions actuelles) :')
+                if (nom && nom.trim() !== '') {
+                  enregistrerDispositionNommee(nom)
+                  setDispositions(Object.keys(lireDispositionsNommees()))
+                }
+              }}
+              className="w-full px-2.5 py-1.5 text-left text-[11px] text-attenue transition-colors hover:bg-bord/60 hover:text-texte"
+            >
+              Enregistrer la disposition actuelle…
+            </button>
+          </div>
         </div>
       )}
     </div>

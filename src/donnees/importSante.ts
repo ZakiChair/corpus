@@ -193,7 +193,19 @@ const CORRESPONDANCES: Record<string, Correspondance> = {
     facteurs: { cm: 1, in: 2.54, m: 100 },
   },
   HKQuantityTypeIdentifierStepCount: { id: 'pas', mode: 'somme' },
+  HKQuantityTypeIdentifierRespiratoryRate: { id: 'freq_respiratoire', mode: 'mediane' },
+  HKQuantityTypeIdentifierVO2Max: { id: 'vo2max', mode: 'mediane' },
+  HKQuantityTypeIdentifierAppleSleepingWristTemperature: {
+    id: 'temp_poignet',
+    mode: 'mediane',
+    // Le degré Fahrenheit ne se convertit pas par un simple facteur : s'il se
+    // présente, l'enregistrement est écarté plutôt que faussé.
+    facteurs: { degC: 1 },
+  },
 }
+
+/** Fenêtre horaire du nadir nocturne : minuit → 8 h, heure locale. */
+const FIN_FENETRE_NUIT_H = 8
 
 const FACTEURS_TAILLE: Record<string, number> = { cm: 1, in: 2.54, m: 100, ft: 30.48 }
 
@@ -284,6 +296,8 @@ export function creerLecteurSante(): LecteurSante {
   const profil: Profil = {}
   let tailleCm: number | undefined
   let sansAsleep = false
+  /** jour → minimum de FC entre minuit et 8 h. */
+  const nadirFc = new Map<Jour, number>()
 
   function ajouter(id: string, jour: Jour, valeur: number): void {
     let parJour = brut.get(id)
@@ -325,6 +339,21 @@ export function creerLecteurSante(): LecteurSante {
         if (cm > 80 && cm < 260) tailleCm = cm
       }
       retenus++
+      return
+    }
+
+    if (type === 'HKQuantityTypeIdentifierHeartRate') {
+      // De loin le type le plus volumineux. Plutôt que le jeter, on en tire
+      // le NADIR NOCTURNE (minimum entre minuit et 8 h) : c'est un meilleur
+      // proxy de récupération que la « FC repos » d'Apple, et une activité
+      // matinale ne peut que le laisser intact — un minimum ne monte pas.
+      const horodatage = analyserHorodatage(a.startDate ?? '')
+      const v = Number(a.value)
+      if (horodatage && Number.isFinite(v) && horodatage.heure < FIN_FENETRE_NUIT_H) {
+        const actuel = nadirFc.get(horodatage.jour)
+        if (actuel === undefined || v < actuel) nadirFc.set(horodatage.jour, v)
+        retenus++
+      }
       return
     }
 
@@ -503,6 +532,13 @@ export function creerLecteurSante(): LecteurSante {
         }
       }
       if (nuit.depuisAuLit) sansAsleep = true
+    }
+
+    poserSerie(series, 'fc_nuit', nadirFc)
+    if (nadirFc.size > 0) {
+      avertissements.push(
+        'La fréquence cardiaque instantanée a été résumée en FC nocturne (minimum entre minuit et 8 h) ; le détail intra-journalier n’est pas conservé.',
+      )
     }
 
     poserSerie(series, 'sommeil_duree', dureeParJour)

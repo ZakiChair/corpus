@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, type ComponentType, type LazyExoticComponent } from 'react'
 import { storeDonnees } from './core/donneesStore'
 import { useFenetres, useHydrate } from './core/hooks'
+import { demarrerSauvegardeAuto } from './donnees/sauvegardeAuto'
 import { demarrerSync } from './donnees/syncSante'
 import { BarreOutils } from './shell/BarreOutils'
 import { BarreTaches } from './shell/BarreTaches'
@@ -48,11 +49,34 @@ export function App() {
       // Premier lancement : la fenêtre Données est le seul endroit d'où l'on
       // peut peupler l'application, autant y conduire directement.
       if (storeDonnees.getState().vide) storeFenetres.getState().ouvrir('donnees')
-      // La synchronisation reprend APRÈS l'hydratation : un import qui
-      // arriverait avant fusionnerait dans un état encore vide, aussitôt
-      // écrasé par le chargement du stockage.
+      // La synchronisation et la sauvegarde reprennent APRÈS l'hydratation :
+      // un import qui arriverait avant fusionnerait dans un état encore vide,
+      // et une sauvegarde figerait ce vide.
       void demarrerSync()
+      void demarrerSauvegardeAuto()
     })
+  }, [])
+
+  useEffect(() => {
+    // ⌥flèches : ancrer la fenêtre au premier plan sans toucher la souris.
+    const clavier = (e: KeyboardEvent) => {
+      if (!e.altKey || e.metaKey || e.ctrlKey) return
+      // Dans un champ, ⌥flèche déplace le curseur mot à mot : on n'y touche pas.
+      const cible = e.target as HTMLElement | null
+      if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return
+      const { fenetres: liste, ancrer, restaurer } = storeFenetres.getState()
+      const visibles = liste.filter((f) => !f.reduite)
+      if (visibles.length === 0) return
+      const sommet = visibles.reduce((m, f) => (f.z > m.z ? f : m))
+      if (e.key === 'ArrowLeft') ancrer(sommet.id, 'gauche')
+      else if (e.key === 'ArrowRight') ancrer(sommet.id, 'droite')
+      else if (e.key === 'ArrowUp') ancrer(sommet.id, 'plein')
+      else if (e.key === 'ArrowDown') restaurer(sommet.id)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', clavier)
+    return () => window.removeEventListener('keydown', clavier)
   }, [])
 
   useEffect(() => {

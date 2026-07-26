@@ -1,0 +1,18 @@
+{
+  "name": "CORPUS — terminal du corps",
+  "short_name": "CORPUS",
+  "description": "Terminal d'analyse des séries du corps. Tout local, rien n'est envoyé.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07090d",
+  "theme_color": "#07090d",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

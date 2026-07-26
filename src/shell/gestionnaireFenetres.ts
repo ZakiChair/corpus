@@ -185,10 +185,14 @@ interface EtatFenetres {
   deplacer: (id: IdFenetre, x: number, y: number) => void
   redimensionner: (id: IdFenetre, g: Geometrie) => void
   ancrer: (id: IdFenetre, cote: CoteAncrage) => void
+  /** Rend à une fenêtre ancrée ou agrandie sa géométrie d'avant. */
+  restaurer: (id: IdFenetre) => void
   basculerReduction: (id: IdFenetre) => void
   basculerAgrandissement: (id: IdFenetre) => void
   mosaique: () => void
   toutFermer: () => void
+  /** Remplace la disposition entière (dispositions nommées). */
+  remplacerFenetres: (fenetres: FenetreOuverte[]) => void
   definirPalette: (ouverte: boolean) => void
 }
 
@@ -199,34 +203,38 @@ function zoneCourante(): { l: number; h: number } {
   return { l: window.innerWidth, h: window.innerHeight }
 }
 
+/** Valide une liste de fenêtres venue du stockage (disposition courante ou nommée). */
+function validerListe(donnees: unknown): FenetreOuverte[] | null {
+  if (!Array.isArray(donnees)) return null
+  const zone = zoneCourante()
+  const valides: FenetreOuverte[] = []
+  for (const f of donnees) {
+    if (typeof f !== 'object' || f === null) continue
+    const o = f as Record<string, unknown>
+    // Une fenêtre retirée du registre entre deux versions doit être ignorée,
+    // pas ressuscitée en composant introuvable.
+    if (!estIdFenetre(o.id)) continue
+    if (typeof o.x !== 'number' || typeof o.y !== 'number') continue
+    if (typeof o.largeur !== 'number' || typeof o.hauteur !== 'number') continue
+    const g = clamperGeometrie(
+      { x: o.x, y: o.y, largeur: o.largeur, hauteur: o.hauteur },
+      zone,
+    )
+    valides.push({
+      id: o.id,
+      ...g,
+      z: typeof o.z === 'number' ? o.z : Z_MIN,
+      reduite: o.reduite === true,
+    })
+  }
+  return valides.length > 0 ? normaliserOrdreZ(valides) : null
+}
+
 function lireDisposition(): FenetreOuverte[] | null {
   try {
     const brut = localStorage.getItem(CLE_DISPOSITION)
     if (!brut) return null
-    const donnees: unknown = JSON.parse(brut)
-    if (!Array.isArray(donnees)) return null
-    const zone = zoneCourante()
-    const valides: FenetreOuverte[] = []
-    for (const f of donnees) {
-      if (typeof f !== 'object' || f === null) continue
-      const o = f as Record<string, unknown>
-      // Une fenêtre retirée du registre entre deux versions doit être ignorée,
-      // pas ressuscitée en composant introuvable.
-      if (!estIdFenetre(o.id)) continue
-      if (typeof o.x !== 'number' || typeof o.y !== 'number') continue
-      if (typeof o.largeur !== 'number' || typeof o.hauteur !== 'number') continue
-      const g = clamperGeometrie(
-        { x: o.x, y: o.y, largeur: o.largeur, hauteur: o.hauteur },
-        zone,
-      )
-      valides.push({
-        id: o.id,
-        ...g,
-        z: typeof o.z === 'number' ? o.z : Z_MIN,
-        reduite: o.reduite === true,
-      })
-    }
-    return valides.length > 0 ? normaliserOrdreZ(valides) : null
+    return validerListe(JSON.parse(brut))
   } catch {
     return null
   }
@@ -238,6 +246,57 @@ function ecrireDisposition(fenetres: FenetreOuverte[]): void {
   } catch {
     // Persistance best-effort : une disposition perdue n'est pas un incident.
   }
+}
+
+/* ————————————————————————— Dispositions nommées ————————————————————————— */
+
+const CLE_DISPOSITIONS_NOMMEES = 'corpus:dispositions'
+
+export function lireDispositionsNommees(): Record<string, FenetreOuverte[]> {
+  try {
+    const brut = localStorage.getItem(CLE_DISPOSITIONS_NOMMEES)
+    if (!brut) return {}
+    const donnees: unknown = JSON.parse(brut)
+    if (typeof donnees !== 'object' || donnees === null) return {}
+    const out: Record<string, FenetreOuverte[]> = {}
+    for (const [nom, liste] of Object.entries(donnees)) {
+      const valides = validerListe(liste)
+      if (valides) out[nom] = valides
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function ecrireDispositionsNommees(d: Record<string, FenetreOuverte[]>): void {
+  try {
+    localStorage.setItem(CLE_DISPOSITIONS_NOMMEES, JSON.stringify(d))
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** Fige la disposition COURANTE sous un nom (« Matin », « Analyse »…). */
+export function enregistrerDispositionNommee(nom: string): void {
+  const propre = nom.trim()
+  if (propre === '') return
+  const toutes = lireDispositionsNommees()
+  toutes[propre] = storeFenetres.getState().fenetres
+  ecrireDispositionsNommees(toutes)
+}
+
+export function appliquerDispositionNommee(nom: string): void {
+  const liste = lireDispositionsNommees()[nom]
+  // En passant par l'action du store : la disposition courante est aussi
+  // persistée, sinon un rechargement rendrait l'ancienne.
+  if (liste) storeFenetres.getState().remplacerFenetres(liste)
+}
+
+export function supprimerDispositionNommee(nom: string): void {
+  const toutes = lireDispositionsNommees()
+  delete toutes[nom]
+  ecrireDispositionsNommees(toutes)
 }
 
 function dispositionInitiale(): FenetreOuverte[] {
@@ -329,6 +388,17 @@ export const storeFenetres = createStore<EtatFenetres>((set, get) => {
       )
     },
 
+    restaurer: (id) => {
+      const zone = zoneCourante()
+      appliquer(
+        get().fenetres.map((f) =>
+          f.id === id && f.avantAgrandissement
+            ? { ...f, ...clamperGeometrie(f.avantAgrandissement, zone), avantAgrandissement: undefined }
+            : f,
+        ),
+      )
+    },
+
     basculerReduction: (id) =>
       appliquer(get().fenetres.map((f) => (f.id === id ? { ...f, reduite: !f.reduite } : f))),
 
@@ -366,6 +436,8 @@ export const storeFenetres = createStore<EtatFenetres>((set, get) => {
     },
 
     toutFermer: () => appliquer([]),
+
+    remplacerFenetres: (fenetres) => appliquer(normaliserOrdreZ(fenetres)),
 
     definirPalette: (ouverte) => set({ paletteOuverte: ouverte }),
   }

@@ -171,9 +171,14 @@ describe('lecture d’un export', () => {
 
   it('ignore les types non pris en charge, mais les compte', () => {
     const noms = r.typesIgnores.map((t) => t.type)
-    expect(noms).toContain('HeartRate')
     expect(noms).toContain('OxygenSaturation')
-    expect(r.series.HKQuantityTypeIdentifierHeartRate).toBeUndefined()
+    expect(r.series.HKQuantityTypeIdentifierOxygenSaturation).toBeUndefined()
+  })
+
+  it('résume la fréquence cardiaque instantanée en nadir nocturne', () => {
+    // Une seule mesure à 3 h du matin dans le fixture : elle EST le nadir.
+    expect(valeurAuJour(r.series.fc_nuit!, '2026-07-25')).toBe(52)
+    expect(r.avertissements.join(' ')).toContain('FC nocturne')
   })
 
   it('transforme les séances en annotations', () => {
@@ -246,6 +251,19 @@ describe('pas venant de plusieurs appareils', () => {
     const lignes = Array.from({ length: 600 }, () => pas('Apple Watch', '08:00', 10))
     const r = lireTout(exportPas(lignes))
     expect(valeurAuJour(r.series.pas!, '2026-07-25')).toBe(6000)
+  })
+})
+
+describe('nadir nocturne', () => {
+  it('prend le minimum de la fenêtre de nuit et ignore la journée', () => {
+    const fc = (heure: string, valeur: number) =>
+      ` <Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" startDate="2026-07-25 ${heure}:00 +0200" endDate="2026-07-25 ${heure}:30 +0200" value="${valeur}"/>`
+    const r = lireTout(
+      `<HealthData>\n${[fc('02:10', 55), fc('04:30', 47), fc('07:15', 58), fc('14:00', 128)].join('\n')}\n</HealthData>`,
+    )
+    // 128 bpm à 14 h est une séance, pas une nuit : seul le créneau
+    // minuit – 8 h compte, et son minimum est 47.
+    expect(valeurAuJour(r.series.fc_nuit!, '2026-07-25')).toBe(47)
   })
 })
 

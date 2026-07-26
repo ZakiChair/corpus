@@ -35,6 +35,9 @@ const CORRESPONDANCES_AUTO: Record<string, CorrespondanceAuto> = {
   body_fat_percentage: { id: 'masse_grasse', mode: 'mediane', pourcentageAmbigu: true },
   waist_circumference: { id: 'tour_taille', mode: 'mediane', facteurs: { cm: 1, in: 2.54, m: 100 } },
   step_count: { id: 'pas', mode: 'somme' },
+  respiratory_rate: { id: 'freq_respiratoire', mode: 'mediane' },
+  vo2_max: { id: 'vo2max', mode: 'mediane' },
+  apple_sleeping_wrist_temperature: { id: 'temp_poignet', mode: 'mediane', facteurs: { degC: 1 } },
 }
 
 function estObjet(v: unknown): v is Record<string, unknown> {
@@ -97,6 +100,27 @@ export function importerAutoExport(brut: unknown): ResultatSante | null {
         const coucher = debut ? (debut.heure < 12 ? debut.heure + 24 : debut.heure) : undefined
         if (duree === undefined && coucher === undefined) continue
         nuits.push({ jour, duree, profond, coucher })
+        retenus++
+      }
+      continue
+    }
+
+    if (nom === 'heart_rate') {
+      // L'agrégat quotidien porte Min / Avg / Max ; le minimum du jour est
+      // presque toujours le nadir de sommeil — même série que l'export XML.
+      for (const p of metrique.data as unknown[]) {
+        lus++
+        if (!estObjet(p) || typeof p.Min !== 'number' || !Number.isFinite(p.Min)) continue
+        const jour = jourDe(p.date)
+        if (!jour) continue
+        let parJour = valeurs.get('fc_nuit')
+        if (!parJour) {
+          parJour = new Map()
+          valeurs.set('fc_nuit', parJour)
+        }
+        const liste = parJour.get(jour)
+        if (liste) liste.push(p.Min)
+        else parJour.set(jour, [p.Min])
         retenus++
       }
       continue

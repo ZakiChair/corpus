@@ -65,6 +65,9 @@ const BLOC_QUATRE_SEMAINES = [0.92, 1.0, 1.08, 0.55]
 const PRESENCE: Record<string, number> = {
   vfc: 0.92,
   fc_repos: 0.93,
+  fc_nuit: 0.9,
+  temp_poignet: 0.88,
+  freq_respiratoire: 0.88,
   sommeil_duree: 0.93,
   sommeil_profond: 0.9,
   sommeil_coucher: 0.9,
@@ -195,6 +198,10 @@ export function genererHistorique(options: OptionsGenerateur = {}): EtatCorpus {
   const brut: Record<string, number[]> = {
     vfc: [],
     fc_repos: [],
+    fc_nuit: [],
+    temp_poignet: [],
+    freq_respiratoire: [],
+    vo2max: [],
     sommeil_duree: [],
     sommeil_profond: [],
     sommeil_coucher: [],
@@ -327,6 +334,22 @@ export function genererHistorique(options: OptionsGenerateur = {}): EtatCorpus {
       36,
       95,
     )
+    // Le nadir de sommeil suit la FC repos, une dizaine de battements plus bas.
+    const fcNuit = borner(fcRepos - 9 + gaussienne(alea, 0, 1.3), 32, 88)
+    // La température du poignet ne bouge presque jamais — c'est ce qui rend
+    // ses écarts (fièvre, alcool) si lisibles dans une étude d'événement.
+    const tempPoignet = borner(
+      34.4 + 0.55 * (malade ? 1 : 0) + 0.15 * (alcoolHier ? 1 : 0) + gaussienne(alea, 0, 0.12),
+      33,
+      37.5,
+    )
+    const freqRespiratoire = borner(
+      14.2 + 1.6 * (malade ? 1 : 0) + 0.5 * stressLatent + gaussienne(alea, 0, 0.5),
+      10,
+      24,
+    )
+    // Le VO₂max estimé suit la forme chronique, très lentement.
+    const vo2max = borner(46 + 3.5 * ctlNorm + gaussienne(alea, 0, 0.4), 38, 56)
 
     /* — Morphologie — */
     // Trois phases : prise lente, sèche, maintien.
@@ -392,6 +415,10 @@ export function genererHistorique(options: OptionsGenerateur = {}): EtatCorpus {
 
     brut.vfc!.push(vfc)
     brut.fc_repos!.push(fcRepos)
+    brut.fc_nuit!.push(fcNuit)
+    brut.temp_poignet!.push(tempPoignet)
+    brut.freq_respiratoire!.push(freqRespiratoire)
+    brut.vo2max!.push(vo2max)
     brut.sommeil_duree!.push(duree)
     brut.sommeil_profond!.push(profond)
     brut.sommeil_coucher!.push(coucher)
@@ -419,6 +446,10 @@ export function genererHistorique(options: OptionsGenerateur = {}): EtatCorpus {
       // Composition corporelle et tour de taille : mesures hebdomadaires.
       if (id === 'masse_grasse' || id === 'tour_taille') {
         if (i % 7 !== 3) continue
+      } else if (id === 'vo2max') {
+        // Apple ne réestime le VO₂max que sur certaines activités : une
+        // mesure tous les dix jours environ.
+        if (i % 10 !== 5) continue
       } else if (trous) {
         const presence = PRESENCE[id] ?? 1
         if (!tirage(alea, presence)) continue
@@ -442,6 +473,10 @@ export function genererHistorique(options: OptionsGenerateur = {}): EtatCorpus {
 const DECIMALES: Record<string, number> = {
   vfc: 0,
   fc_repos: 0,
+  fc_nuit: 0,
+  temp_poignet: 2,
+  freq_respiratoire: 1,
+  vo2max: 1,
   sommeil_duree: 2,
   sommeil_profond: 2,
   sommeil_coucher: 2,

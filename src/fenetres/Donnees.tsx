@@ -11,6 +11,7 @@ import { importerAthlos } from '../donnees/importAthlos'
 import { estAutoExport, importerAutoExport } from '../donnees/importAutoExport'
 import { importerCsv } from '../donnees/importCsv'
 import { ImportAnnule, importerSante, type ProgressionSante } from '../donnees/importSante'
+import { storeSauvegarde } from '../donnees/sauvegardeAuto'
 import { storeSync } from '../donnees/syncSante'
 import { Bouton, EnteteFenetre, Etiquette, PiedNote } from '../ui/ui'
 
@@ -330,6 +331,7 @@ export function Donnees() {
             <Bouton onClick={exporter} desactive={ids.length === 0}>
               Exporter en JSON
             </Bouton>
+            <BoutonsSauvegardeAuto />
             {confirmationEffacement ? (
               <>
                 <Bouton
@@ -451,6 +453,45 @@ export function Donnees() {
 
       <PiedNote>{AVERTISSEMENT}</PiedNote>
     </div>
+  )
+}
+
+/**
+ * Sauvegarde automatique : une copie JSON quotidienne dans un dossier choisi
+ * (idéalement iCloud Drive), rotation sur deux semaines.
+ */
+function BoutonsSauvegardeAuto() {
+  const sauvegarde = useStore(storeSauvegarde)
+  if (sauvegarde.phase === 'indisponible') return null
+
+  return (
+    <>
+      {sauvegarde.phase === 'actif' ? (
+        <>
+          <Etiquette
+            jeton="--c-favorable"
+            titre={sauvegarde.derniere ? `Dernière copie : ${sauvegarde.derniere}` : undefined}
+          >
+            Copie quotidienne dans « {sauvegarde.dossier} »
+          </Etiquette>
+          <Bouton onClick={() => void sauvegarde.oublier()}>Arrêter la copie</Bouton>
+        </>
+      ) : sauvegarde.phase === 'permission' ? (
+        <Bouton variante="accent" onClick={() => void sauvegarde.reprendre()}>
+          Reprendre la copie vers « {sauvegarde.dossier} »
+        </Bouton>
+      ) : (
+        <Bouton
+          onClick={() => void sauvegarde.choisirDossier()}
+          titre="Une copie JSON par jour, rotation sur deux semaines — vise un dossier iCloud Drive pour une sauvegarde hors machine"
+        >
+          Copier chaque jour vers un dossier…
+        </Bouton>
+      )}
+      {sauvegarde.erreur && (
+        <span className="text-[10px] text-defavorable">{sauvegarde.erreur}</span>
+      )}
+    </>
   )
 }
 

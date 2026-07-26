@@ -79,6 +79,55 @@ export const METRIQUES = [
     saisieManuelle: true,
   },
   {
+    // Minimum de la fréquence cardiaque entre minuit et 8 h : meilleur proxy
+    // de récupération que la « FC repos » d'Apple, qui est une moyenne opaque.
+    id: 'fc_nuit',
+    label: 'FC nocturne',
+    abrege: 'FC nuit',
+    unite: 'bpm',
+    famille: 'recuperation',
+    sens: 'bas',
+    min: 25,
+    max: 110,
+    decimales: 0,
+  },
+  {
+    // Température absolue mesurée par la montre pendant le sommeil. Le signal
+    // utile est l'ÉCART à sa propre normale (maladie, cycle) — d'où un sens
+    // neutre : plus haut n'est ni bon ni mauvais, seulement inhabituel.
+    id: 'temp_poignet',
+    label: 'Température du poignet',
+    abrege: 'T° poignet',
+    unite: '°C',
+    famille: 'recuperation',
+    sens: 'neutre',
+    min: 30,
+    max: 40,
+    decimales: 2,
+  },
+  {
+    id: 'freq_respiratoire',
+    label: 'Fréquence respiratoire',
+    abrege: 'Fréq. resp.',
+    unite: '/min',
+    famille: 'sommeil',
+    sens: 'neutre',
+    min: 6,
+    max: 30,
+    decimales: 1,
+  },
+  {
+    id: 'vo2max',
+    label: 'VO₂max estimé',
+    abrege: 'VO₂max',
+    unite: 'ml/kg·min',
+    famille: 'charge',
+    sens: 'haut',
+    min: 15,
+    max: 80,
+    decimales: 1,
+  },
+  {
     id: 'sommeil_duree',
     label: 'Durée de sommeil',
     abrege: 'Sommeil',

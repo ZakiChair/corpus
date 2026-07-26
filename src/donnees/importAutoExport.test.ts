@@ -46,7 +46,12 @@ const EXPORT = {
       {
         name: 'heart_rate',
         units: 'count/min',
-        data: [{ date: '2026-07-25 03:00:00 +0200', qty: 52 }],
+        data: [{ date: '2026-07-25 06:00:00 +0200', Min: 46, Avg: 71, Max: 152 }],
+      },
+      {
+        name: 'blood_oxygen_saturation',
+        units: '%',
+        data: [{ date: '2026-07-25 03:00:00 +0200', qty: 97 }],
       },
     ],
     workouts: [
@@ -93,9 +98,13 @@ describe('importerAutoExport', () => {
     expect(r.annotations[0]!.note).toBe('Musculation — 62 min')
   })
 
+  it('tire la FC nocturne du minimum quotidien de fréquence cardiaque', () => {
+    expect(valeurAuJour(r.series.fc_nuit!, '2026-07-25')).toBe(46)
+  })
+
   it('compte les métriques non prises en charge sans rejeter le fichier', () => {
-    expect(r.typesIgnores.map((t) => t.type)).toContain('heart_rate')
-    expect(r.series.heart_rate).toBeUndefined()
+    expect(r.typesIgnores.map((t) => t.type)).toContain('blood_oxygen_saturation')
+    expect(r.series.blood_oxygen_saturation).toBeUndefined()
   })
 
   it('prend le champ asleep quand le détail des phases manque', () => {

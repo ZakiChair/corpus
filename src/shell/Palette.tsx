@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePaletteOuverte } from '../core/hooks'
-import { storeFenetres } from './gestionnaireFenetres'
-import { REGISTRE_FENETRES, type IdFenetre } from './registre'
+import {
+  appliquerDispositionNommee,
+  lireDispositionsNommees,
+  storeFenetres,
+} from './gestionnaireFenetres'
+import { REGISTRE_FENETRES } from './registre'
 
 /**
  * Palette de commandes (⌘K).
@@ -33,10 +37,11 @@ export function scoreFlou(requete: string, cible: string): number {
 }
 
 interface Entree {
-  id: IdFenetre
+  cle: string
   mnemonique: string
   titre: string
   description: string
+  executer: () => void
 }
 
 export function Palette() {
@@ -45,15 +50,26 @@ export function Palette() {
   const [indexActif, setIndexActif] = useState(0)
   const refChamp = useRef<HTMLInputElement>(null)
 
+  // Recalculées à chaque ouverture : les dispositions nommées bougent.
   const entrees: Entree[] = useMemo(
-    () =>
-      REGISTRE_FENETRES.map((f) => ({
-        id: f.id,
+    () => [
+      ...REGISTRE_FENETRES.map((f) => ({
+        cle: f.id,
         mnemonique: f.mnemonique,
         titre: f.titre,
         description: f.description,
+        executer: () => storeFenetres.getState().ouvrir(f.id),
       })),
-    [],
+      ...Object.keys(lireDispositionsNommees()).map((nom) => ({
+        cle: `disposition:${nom}`,
+        mnemonique: 'DISP',
+        titre: nom,
+        description: 'Disposition enregistrée — fenêtres et positions',
+        executer: () => appliquerDispositionNommee(nom),
+      })),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ouverte],
   )
 
   const resultats = useMemo(() => {
@@ -86,7 +102,7 @@ export function Palette() {
 
   useEffect(() => {
     const clavier = (e: KeyboardEvent) => {
-      const { definirPalette, ouvrir } = storeFenetres.getState()
+      const { definirPalette } = storeFenetres.getState()
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault()
         definirPalette(!storeFenetres.getState().paletteOuverte)
@@ -106,7 +122,7 @@ export function Palette() {
         e.preventDefault()
         const choix = resultatsRef.current[indexActifRef.current]
         if (choix) {
-          ouvrir(choix.id)
+          choix.executer()
           definirPalette(false)
         }
       }
@@ -147,11 +163,11 @@ export function Palette() {
           ) : (
             resultats.map((e, i) => (
               <button
-                key={e.id}
+                key={e.cle}
                 type="button"
                 onMouseEnter={() => setIndexActif(i)}
                 onClick={() => {
-                  storeFenetres.getState().ouvrir(e.id)
+                  e.executer()
                   storeFenetres.getState().definirPalette(false)
                 }}
                 className={`flex w-full items-start gap-2.5 px-3 py-1.5 text-left transition-colors ${
