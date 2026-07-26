@@ -336,10 +336,12 @@ export function Donnees() {
               <>
                 <Bouton
                   variante="danger"
-                  onClick={() => {
-                    storeDonnees.getState().reinitialiser()
+                  onClick={async () => {
+                    const efface = await storeDonnees.getState().reinitialiser()
                     setConfirmationEffacement(false)
-                    setMessage({ ton: 'avert', texte: 'Toutes les données ont été effacées.' })
+                    if (efface) {
+                      setMessage({ ton: 'avert', texte: 'Toutes les données ont été effacées.' })
+                    }
                   }}
                 >
                   Confirmer l’effacement

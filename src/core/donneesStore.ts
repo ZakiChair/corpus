@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { genererHistorique } from '../donnees/generateur'
-import { stockage, type AdaptateurStockage } from './stockage'
+import { ConflitStockage, stockage, type AdaptateurStockage } from './stockage'
 import { aujourdhui, type Jour } from './temps'
 import {
   etatVide,
@@ -52,7 +52,7 @@ export interface EtatStore {
     profil?: Partial<Profil>,
   ) => void
   genererDemonstration: (jours?: number) => void
-  reinitialiser: () => void
+  reinitialiser: () => Promise<boolean>
 }
 
 function estVide(etat: EtatCorpus): boolean {
@@ -64,6 +64,7 @@ function estVide(etat: EtatCorpus): boolean {
 
 export interface OptionsStoreDonnees {
   delaiEnregistrement?: number
+  delaiEcritureMs?: number
 }
 
 export function creerStoreDonnees(
@@ -75,40 +76,60 @@ export function creerStoreDonnees(
   let revisionCourante = 0
   let ecritureActive: Promise<void> | undefined
   let hydratationActive: Promise<void> | undefined
-  const delaiEnregistrement = options.delaiEnregistrement ?? 400
+  const delaiEnregistrement = options.delaiEcritureMs ?? options.delaiEnregistrement ?? 400
 
   return createStore<EtatStore>((set, get) => {
-    function annulerEcritureEnAttente(): void {
+    function annulerMinuteur(): void {
       if (minuteur !== undefined) clearTimeout(minuteur)
       minuteur = undefined
+    }
+
+    function annulerEcritureEnAttente(): void {
+      annulerMinuteur()
       etatEnAttente = undefined
     }
 
-    async function enregistrerMaintenant(etat: EtatCorpus): Promise<void> {
-      const precedente = ecritureActive
+    function signalerErreurEcriture(erreur: unknown): void {
+      annulerEcritureEnAttente()
+      if (erreur instanceof ConflitStockage) {
+        set({ persistance: { statut: 'conflit' } })
+        return
+      }
+      const message = erreur instanceof Error ? erreur.message : String(erreur)
+      set({ persistance: { statut: 'erreur-ecriture', message } })
+    }
+
+    function viderFile(): Promise<void> {
+      if (ecritureActive) return ecritureActive
+
       const courante = (async () => {
-        if (precedente) await precedente
-        revisionCourante = await adaptateur.enregistrer(etat, revisionCourante)
+        try {
+          while (etatEnAttente !== undefined) {
+            const etat = etatEnAttente
+            etatEnAttente = undefined
+            revisionCourante = await adaptateur.enregistrer(etat, revisionCourante)
+          }
+          if (get().persistance.statut === 'pret') {
+            set({ persistance: { statut: 'pret', sauvegarde: 'a-jour' } })
+          }
+        } catch (erreur) {
+          signalerErreurEcriture(erreur)
+        }
       })()
       ecritureActive = courante
-      try {
-        await courante
-        if (ecritureActive === courante && etatEnAttente === undefined) {
-          set({ persistance: { statut: 'pret', sauvegarde: 'a-jour' } })
-        }
-      } finally {
+      void courante.finally(() => {
         if (ecritureActive === courante) ecritureActive = undefined
-      }
+      })
+      return courante
     }
 
     function enregistrerPlusTard(etat: EtatCorpus): void {
-      if (minuteur !== undefined) clearTimeout(minuteur)
+      annulerMinuteur()
       etatEnAttente = etat
       set({ persistance: { statut: 'pret', sauvegarde: 'en-attente' } })
       minuteur = setTimeout(() => {
         minuteur = undefined
-        etatEnAttente = undefined
-        void enregistrerMaintenant(etat).catch(() => undefined)
+        void viderFile()
       }, delaiEnregistrement)
     }
 
@@ -176,10 +197,8 @@ export function creerStoreDonnees(
       },
 
       purgerEcritureEnAttente: async () => {
-        const etat = etatEnAttente
-        annulerEcritureEnAttente()
-        if (etat) await enregistrerMaintenant(etat)
-        else if (ecritureActive) await ecritureActive
+        annulerMinuteur()
+        if (etatEnAttente !== undefined || ecritureActive) await viderFile()
       },
 
       remplacer: (etat) => {
@@ -247,16 +266,28 @@ export function creerStoreDonnees(
         enregistrerPlusTard(etat)
       },
 
-      reinitialiser: () => {
-        if (get().persistance.statut !== 'pret') return
+      reinitialiser: async () => {
+        if (get().persistance.statut !== 'pret') return false
+        set({ persistance: { statut: 'chargement' } })
         // Un enregistrement différé encore armé ré-écrirait l'ancien état APRÈS
         // l'effacement : on le désamorce d'abord.
         annulerEcritureEnAttente()
-        const etat = etatVide(aujourdhui())
-        set({ etat, vide: true })
-        void adaptateur.effacer(revisionCourante).then((revision) => {
+        const ecriture = ecritureActive
+        if (ecriture) await ecriture
+        try {
+          const revision = await adaptateur.effacer(revisionCourante)
           revisionCourante = revision
-        })
+          const etat = etatVide(aujourdhui())
+          set({
+            etat,
+            vide: true,
+            persistance: { statut: 'pret', sauvegarde: 'a-jour' },
+          })
+          return true
+        } catch (erreur) {
+          signalerErreurEcriture(erreur)
+          return false
+        }
       },
     }
   })
