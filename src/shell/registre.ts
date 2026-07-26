@@ -46,8 +46,10 @@ export const REGISTRE_FENETRES = [
     id: 'correlations',
     titre: 'Corrélations',
     mnemonique: 'CORR',
-    largeur: 780,
-    hauteur: 620,
+    // Une matrice 15 × 15 avec ses étiquettes a besoin de place : la taille
+    // par défaut doit contenir le contenu, pas obliger à agrandir d'abord.
+    largeur: 940,
+    hauteur: 700,
     description: 'Matrice décalée : qui précède quoi, et de combien de jours',
   },
   {

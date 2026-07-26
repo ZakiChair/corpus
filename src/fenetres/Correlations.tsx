@@ -32,6 +32,8 @@ import { EnteteFenetre, PiedNote, Segments, Vide } from '../ui/ui'
 const MARGE = { gauche: 82, haut: 74, droite: 8, bas: 8 }
 const POINTS_MINIMUM = 25
 const PAIRES_MINIMUM = 20
+/** Largeur de cellule en deçà de laquelle les étiquettes passent à la verticale. */
+const SEUIL_ETIQUETTES_OBLIQUES = 44
 
 export function Correlations() {
   const etat = useEtat()
@@ -96,6 +98,9 @@ export function Correlations() {
       )
       if (dispo < 40) return
       const cote = dispo / n
+      // La matrice est carrée : quand la fenêtre est plus large que haute, on
+      // la centre au lieu de la coller à gauche avec un grand vide à droite.
+      const x0 = MARGE.gauche + Math.max(0, (largeur - MARGE.gauche - MARGE.droite - dispo) / 2)
 
       const fond = lireJeton('--c-fond')
       const attenue = lireJeton('--c-attenue')
@@ -104,13 +109,16 @@ export function Correlations() {
       const positif = hexVersRgb(lireJeton('--c-accent'))
       const negatif = hexVersRgb(lireJeton('--c-serie4'))
 
-      ctx.font = '9px ui-monospace, monospace'
+      // La police suit la taille des cellules : 9 px fixes deviennent
+      // illisibles dès que la matrice se resserre.
+      const taillePolice = Math.max(7, Math.min(10, cote * 0.62))
+      ctx.font = `${taillePolice.toFixed(1)}px ui-monospace, monospace`
 
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
           const r = matrice.valeurs[i]?.[j]
           const nb = matrice.effectifs[i]?.[j] ?? 0
-          const x = MARGE.gauche + j * cote
+          const x = x0 + j * cote
           const y = MARGE.haut + i * cote
 
           if (r === undefined || nb < PAIRES_MINIMUM) {
@@ -135,22 +143,34 @@ export function Correlations() {
         }
       }
 
-      // Étiquettes de lignes à gauche, de colonnes inclinées en haut : à
-      // quinze métriques, l'horizontal se chevaucherait.
+      /*
+       * Étiquettes. L'angle des colonnes n'est pas décoratif : à 45°,
+       * l'empreinte HORIZONTALE d'une étiquette vaut largeur_texte × cos(45°),
+       * soit environ 42 px — il faut donc des cellules d'au moins cette
+       * largeur. À 90°, l'empreinte se réduit à la HAUTEUR du texte, une
+       * dizaine de pixels, et tient dans n'importe quelle cellule. On bascule
+       * donc selon la place, plutôt que de figer un compromis mauvais aux
+       * deux extrêmes.
+       */
       ctx.fillStyle = attenue
+      const angle = cote >= SEUIL_ETIQUETTES_OBLIQUES ? -Math.PI / 4 : -Math.PI / 2
+      // Sous une certaine hauteur de cellule, les lignes se chevauchent aussi :
+      // on n'en étiquette qu'une sur deux.
+      const pasEtiquette = cote >= taillePolice + 3 ? 1 : 2
+
       ctx.textAlign = 'right'
       ctx.textBaseline = 'middle'
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < n; i += pasEtiquette) {
         ctx.fillText(
           definitionOuGenerique(ids[i]!).abrege,
           MARGE.gauche - 5,
           MARGE.haut + i * cote + cote / 2,
         )
       }
-      for (let j = 0; j < n; j++) {
+      for (let j = 0; j < n; j += pasEtiquette) {
         ctx.save()
-        ctx.translate(MARGE.gauche + j * cote + cote / 2, MARGE.haut - 5)
-        ctx.rotate(-Math.PI / 4)
+        ctx.translate(x0 + j * cote + cote / 2, MARGE.haut - 5)
+        ctx.rotate(angle)
         ctx.textAlign = 'left'
         ctx.textBaseline = 'middle'
         ctx.fillText(definitionOuGenerique(ids[j]!).abrege, 0, 0)
@@ -174,7 +194,9 @@ export function Correlations() {
       rect.height - MARGE.haut - MARGE.bas,
     )
     const cote = dispo / ids.length
-    const j = Math.floor((pointeur.x - MARGE.gauche) / cote)
+    // Même centrage qu'au dessin, sinon le survol vise à côté.
+    const x0 = MARGE.gauche + Math.max(0, (rect.width - MARGE.gauche - MARGE.droite - dispo) / 2)
+    const j = Math.floor((pointeur.x - x0) / cote)
     const i = Math.floor((pointeur.y - MARGE.haut) / cote)
     if (i < 0 || j < 0 || i >= ids.length || j >= ids.length) return null
     return { i, j, r: matrice.valeurs[i]?.[j], n: matrice.effectifs[i]?.[j] ?? 0 }

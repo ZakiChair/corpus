@@ -6,7 +6,14 @@
  * où le type est attendu.
  */
 
-export type Famille = 'recuperation' | 'sommeil' | 'morphologie' | 'charge' | 'subjectif'
+export type Famille =
+  | 'recuperation'
+  | 'sommeil'
+  | 'morphologie'
+  | 'charge'
+  | 'subjectif'
+  /** Métriques arrivées par import, absentes du catalogue. */
+  | 'autre'
 
 /**
  * `haut` : une valeur élevée est favorable. `bas` : l'inverse.
@@ -43,6 +50,7 @@ export const LIBELLES_FAMILLE: Record<Famille, string> = {
   morphologie: 'Morphologie',
   charge: 'Charge',
   subjectif: 'Subjectif',
+  autre: 'Importées',
 }
 
 export const METRIQUES = [
@@ -242,7 +250,8 @@ export function definitionOuGenerique(id: string): DefinitionMetrique {
       label: id,
       abrege: id,
       unite: '',
-      famille: 'subjectif',
+      // Rangée à part : on ne sait ni ce que c'est, ni dans quelle unité.
+      famille: 'autre',
       sens: 'neutre',
       min: -1e9,
       max: 1e9,
@@ -275,6 +284,7 @@ export const FAMILLES: readonly Famille[] = [
   'morphologie',
   'charge',
   'subjectif',
+  'autre',
 ]
 
 /** Formate une valeur avec l'unité, en respectant le nombre de décimales déclaré. */

@@ -9,10 +9,10 @@ import {
   formaterHeureCoucher,
   formaterValeur,
   LIBELLES_FAMILLE,
-  METRIQUES,
+  type DefinitionMetrique,
   type Famille,
 } from '../core/metriques'
-import { serie as lireSerie } from '../core/series'
+import { serie as lireSerie, seriesRenseignees } from '../core/series'
 import { formaterJourCourt, formaterJourLong } from '../core/temps'
 import type { Serie } from '../core/types'
 import { nomJetonSerie } from '../ui/jetonsCanvas'
@@ -71,10 +71,14 @@ export function Bilan() {
   const regime = useMemo(() => calculerRegime(etat.series, { fenetre: jours }), [etat, jours])
   const dernierRegime = regime.serie[regime.serie.length - 1]
 
+  // On parcourt les séries RENSEIGNÉES et non le catalogue : sinon une
+  // métrique arrivée par import — une performance ATHLOS, une colonne CSV
+  // hors catalogue — apparaîtrait dans SERI et CORR mais jamais ici.
   const tuiles = useMemo(
     () =>
-      METRIQUES.map((def) => {
-        const s = lireSerie(etat, def.id)
+      seriesRenseignees(etat).map((id) => {
+        const def = definitionOuGenerique(id)
+        const s = lireSerie(etat, id)
         if (s.length === 0) return null
         const dernier = s[s.length - 1]!
         const reference = zAvecFenetreAdaptee(s, jours, dernier.j)
@@ -180,7 +184,7 @@ function BanniereRegime({
 }
 
 interface PropsTuile {
-  def: (typeof METRIQUES)[number]
+  def: DefinitionMetrique
   serie: Serie
   dernier: { j: string; v: number }
   z: number | undefined
