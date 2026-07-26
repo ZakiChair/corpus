@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   clamperGeometrie,
+  coteAncrageDepuisPointeur,
+  geometrieAncrage,
   grilleMosaique,
+  HAUTEUR_BARRE_BAS,
   HAUTEUR_BARRE_HAUT,
   HAUTEUR_MIN,
   LARGEUR_MIN,
@@ -120,6 +123,56 @@ describe('positionCascade', () => {
     }
     // La suite doit boucler et non filer indéfiniment vers le bas.
     expect(new Set(positions.map((p) => p.y)).size).toBeLessThan(40)
+  })
+})
+
+describe('coteAncrageDepuisPointeur', () => {
+  it('propose une moitié sur les bords gauche et droit', () => {
+    expect(coteAncrageDepuisPointeur(5, 500, ZONE)).toBe('gauche')
+    expect(coteAncrageDepuisPointeur(ZONE.l - 5, 500, ZONE)).toBe('droite')
+  })
+
+  it('propose un quart aux extrémités de ces bords', () => {
+    expect(coteAncrageDepuisPointeur(5, HAUTEUR_BARRE_HAUT + 10, ZONE)).toBe('no')
+    expect(coteAncrageDepuisPointeur(ZONE.l - 5, HAUTEUR_BARRE_HAUT + 10, ZONE)).toBe('ne')
+    expect(coteAncrageDepuisPointeur(5, ZONE.h - 10, ZONE)).toBe('so')
+    expect(coteAncrageDepuisPointeur(ZONE.l - 5, ZONE.h - 10, ZONE)).toBe('se')
+  })
+
+  it('propose le plein écran sur le bord haut', () => {
+    expect(coteAncrageDepuisPointeur(800, 5, ZONE)).toBe('plein')
+  })
+
+  it('ne propose rien au centre ni sur le bord bas', () => {
+    expect(coteAncrageDepuisPointeur(800, 500, ZONE)).toBeNull()
+    // Le bas, c'est la barre des tâches : y ancrer serait un piège à clics.
+    expect(coteAncrageDepuisPointeur(800, ZONE.h - 5, ZONE)).toBeNull()
+  })
+})
+
+describe('geometrieAncrage', () => {
+  const utile = ZONE.h - HAUTEUR_BARRE_HAUT - HAUTEUR_BARRE_BAS
+
+  it('fait carreler exactement les deux moitiés, même sur largeur impaire', () => {
+    const zone = { l: 1601, h: 1000 }
+    const g = geometrieAncrage('gauche', zone)
+    const d = geometrieAncrage('droite', zone)
+    expect(g.x).toBe(0)
+    expect(g.largeur + d.largeur).toBe(zone.l)
+    expect(d.x).toBe(g.largeur)
+  })
+
+  it('occupe toute la zone utile entre les barres en plein écran', () => {
+    const p = geometrieAncrage('plein', ZONE)
+    expect(p).toEqual({ x: 0, y: HAUTEUR_BARRE_HAUT, largeur: ZONE.l, hauteur: utile })
+  })
+
+  it('fait carreler les quatre quarts', () => {
+    const quarts = (['no', 'ne', 'so', 'se'] as const).map((c) => geometrieAncrage(c, ZONE))
+    const surface = quarts.reduce((s, q) => s + q.largeur * q.hauteur, 0)
+    expect(surface).toBe(ZONE.l * utile)
+    // Les quarts du bas commencent là où ceux du haut s'arrêtent.
+    expect(quarts[2]!.y).toBe(quarts[0]!.y + quarts[0]!.hauteur)
   })
 })
 

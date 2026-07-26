@@ -1,8 +1,11 @@
 import { useCallback, useRef, type ReactNode } from 'react'
 import {
+  coteAncrageDepuisPointeur,
+  geometrieAncrage,
   HAUTEUR_MIN,
   LARGEUR_MIN,
   storeFenetres,
+  type CoteAncrage,
   type FenetreOuverte,
 } from './gestionnaireFenetres'
 import { definitionFenetre } from './registre'
@@ -18,6 +21,36 @@ import { definitionFenetre } from './registre'
  */
 
 type Poignee = 'n' | 's' | 'e' | 'o' | 'ne' | 'no' | 'se' | 'so'
+
+/*
+ * Aperçu d'ancrage : un unique <div> hors React, créé au premier glisser.
+ * Passer par un état React repeindrait l'arbre à chaque pointermove, pour un
+ * rectangle qui ne vit que le temps du geste.
+ */
+let apercuAncrage: HTMLDivElement | null = null
+
+function montrerApercu(cote: CoteAncrage | null): void {
+  if (!cote) {
+    if (apercuAncrage) apercuAncrage.style.opacity = '0'
+    return
+  }
+  if (!apercuAncrage) {
+    apercuAncrage = document.createElement('div')
+    apercuAncrage.className = 'corpus-apercu-ancrage'
+    document.body.appendChild(apercuAncrage)
+  }
+  const g = geometrieAncrage(cote, { l: window.innerWidth, h: window.innerHeight })
+  apercuAncrage.style.left = `${g.x}px`
+  apercuAncrage.style.top = `${g.y}px`
+  apercuAncrage.style.width = `${g.largeur}px`
+  apercuAncrage.style.height = `${g.hauteur}px`
+  apercuAncrage.style.opacity = '1'
+}
+
+function retirerApercu(): void {
+  apercuAncrage?.remove()
+  apercuAncrage = null
+}
 
 const POIGNEES: { cle: Poignee; classe: string; curseur: string }[] = [
   { cle: 'n', classe: 'top-0 left-2 right-2 h-1.5', curseur: 'ns-resize' },
@@ -38,8 +71,15 @@ interface Props {
 export function FenetreFlottante({ fenetre, children }: Props) {
   const refRacine = useRef<HTMLDivElement>(null)
   const def = definitionFenetre(fenetre.id)
-  const { focaliser, fermer, deplacer, redimensionner, basculerReduction, basculerAgrandissement } =
-    storeFenetres.getState()
+  const {
+    focaliser,
+    fermer,
+    deplacer,
+    redimensionner,
+    ancrer,
+    basculerReduction,
+    basculerAgrandissement,
+  } = storeFenetres.getState()
 
   const demarrerDeplacement = useCallback(
     (e: React.PointerEvent) => {
@@ -48,29 +88,75 @@ export function FenetreFlottante({ fenetre, children }: Props) {
       if (!racine) return
       focaliser(fenetre.id)
       const depart = { x: e.clientX, y: e.clientY }
-      const origine = { x: fenetre.x, y: fenetre.y }
       const cible = e.currentTarget as HTMLElement
       cible.setPointerCapture(e.pointerId)
+
+      let origine = { x: fenetre.x, y: fenetre.y }
       let dernier = origine
+      /** Taille courante — change si la fenêtre est décrochée en route. */
+      let taille = { largeur: fenetre.largeur, hauteur: fenetre.hauteur }
+      const avant = fenetre.avantAgrandissement
+      let decrochee = false
+      let bougee = false
+      let cote: CoteAncrage | null = null
 
       const bouger = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - depart.x) + Math.abs(ev.clientY - depart.y) < 4 && !bougee) return
+        bougee = true
+
+        // Fenêtre ancrée ou agrandie : le premier vrai mouvement la décroche
+        // et lui rend sa taille d'avant, le curseur restant à la même
+        // position RELATIVE dans la barre de titre — sans quoi elle saute
+        // sous la souris.
+        if (avant && !decrochee) {
+          decrochee = true
+          taille = { largeur: avant.largeur, hauteur: avant.hauteur }
+          const part = Math.min(Math.max((depart.x - fenetre.x) / fenetre.largeur, 0.1), 0.9)
+          origine = { x: depart.x - avant.largeur * part, y: fenetre.y }
+          racine.style.width = `${taille.largeur}px`
+          racine.style.height = `${taille.hauteur}px`
+        }
+
         dernier = {
           x: origine.x + (ev.clientX - depart.x),
           y: Math.max(0, origine.y + (ev.clientY - depart.y)),
         }
         racine.style.left = `${dernier.x}px`
         racine.style.top = `${dernier.y}px`
+
+        cote = coteAncrageDepuisPointeur(ev.clientX, ev.clientY, {
+          l: window.innerWidth,
+          h: window.innerHeight,
+        })
+        montrerApercu(cote)
       }
       const relacher = () => {
         cible.releasePointerCapture(e.pointerId)
         window.removeEventListener('pointermove', bouger)
         window.removeEventListener('pointerup', relacher)
-        deplacer(fenetre.id, dernier.x, dernier.y)
+        retirerApercu()
+        // Un simple clic sur la barre de titre ne doit rien écrire : il
+        // effacerait la géométrie de restauration d'une fenêtre ancrée.
+        if (!bougee) return
+        if (cote) ancrer(fenetre.id, cote)
+        else if (decrochee) redimensionner(fenetre.id, { ...dernier, ...taille })
+        else deplacer(fenetre.id, dernier.x, dernier.y)
       }
       window.addEventListener('pointermove', bouger)
       window.addEventListener('pointerup', relacher)
     },
-    [fenetre.id, fenetre.x, fenetre.y, focaliser, deplacer],
+    [
+      fenetre.id,
+      fenetre.x,
+      fenetre.y,
+      fenetre.largeur,
+      fenetre.hauteur,
+      fenetre.avantAgrandissement,
+      focaliser,
+      deplacer,
+      redimensionner,
+      ancrer,
+    ],
   )
 
   const demarrerRedimensionnement = useCallback(

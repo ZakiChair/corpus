@@ -152,6 +152,27 @@ body {
   touch-action: none;
 }
 
+/*
+ * Aperçu d'ancrage : la zone que la fenêtre occupera si on la relâche là.
+ * Géré hors React (cf. FenetreFlottante) parce qu'il vit le temps d'un
+ * glisser, à soixante mises à jour par seconde.
+ */
+.corpus-apercu-ancrage {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  border: 1px solid var(--c-accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
+  opacity: 0;
+  transition:
+    left 120ms ease-out,
+    top 120ms ease-out,
+    width 120ms ease-out,
+    height 120ms ease-out,
+    opacity 100ms ease-out;
+}
+
 input,
 select,
 textarea,

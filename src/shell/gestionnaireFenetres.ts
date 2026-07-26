@@ -89,6 +89,63 @@ export function positionCascade(
   }
 }
 
+/* ————————————————————————— Ancrage aux bords ————————————————————————— */
+
+export type CoteAncrage = 'plein' | 'gauche' | 'droite' | 'no' | 'ne' | 'so' | 'se'
+
+/** Distance au bord (px) en deçà de laquelle le glisser propose un ancrage. */
+export const SEUIL_BORD_ANCRAGE = 16
+/** Longueur (px) des zones de coin le long des bords gauche et droit. */
+export const SEUIL_COIN_ANCRAGE = 110
+
+/**
+ * Côté d'ancrage proposé pour une position de POINTEUR (pas de fenêtre) :
+ * bord gauche ou droit → moitié d'écran, leurs extrémités → quart, bord haut →
+ * plein écran. Le bas est laissé libre — c'est la barre des tâches.
+ */
+export function coteAncrageDepuisPointeur(
+  x: number,
+  y: number,
+  zone: { l: number; h: number },
+): CoteAncrage | null {
+  const gauche = x <= SEUIL_BORD_ANCRAGE
+  const droite = x >= zone.l - SEUIL_BORD_ANCRAGE
+  if (gauche || droite) {
+    if (y <= HAUTEUR_BARRE_HAUT + SEUIL_COIN_ANCRAGE) return gauche ? 'no' : 'ne'
+    if (y >= zone.h - HAUTEUR_BARRE_BAS - SEUIL_COIN_ANCRAGE) return gauche ? 'so' : 'se'
+    return gauche ? 'gauche' : 'droite'
+  }
+  if (y <= SEUIL_BORD_ANCRAGE) return 'plein'
+  return null
+}
+
+/** Géométrie cible d'un ancrage : la zone utile entre les deux barres. */
+export function geometrieAncrage(cote: CoteAncrage, zone: { l: number; h: number }): Geometrie {
+  const y0 = HAUTEUR_BARRE_HAUT
+  const l = zone.l
+  const h = zone.h - HAUTEUR_BARRE_HAUT - HAUTEUR_BARRE_BAS
+  // Les moitiés carrellent exactement : demi + (total − demi) = total, sans
+  // pixel perdu ni recouvert quand la largeur est impaire.
+  const demiL = Math.round(l / 2)
+  const demiH = Math.round(h / 2)
+  switch (cote) {
+    case 'plein':
+      return { x: 0, y: y0, largeur: l, hauteur: h }
+    case 'gauche':
+      return { x: 0, y: y0, largeur: demiL, hauteur: h }
+    case 'droite':
+      return { x: demiL, y: y0, largeur: l - demiL, hauteur: h }
+    case 'no':
+      return { x: 0, y: y0, largeur: demiL, hauteur: demiH }
+    case 'ne':
+      return { x: demiL, y: y0, largeur: l - demiL, hauteur: demiH }
+    case 'so':
+      return { x: 0, y: y0 + demiH, largeur: demiL, hauteur: h - demiH }
+    case 'se':
+      return { x: demiL, y: y0 + demiH, largeur: l - demiL, hauteur: h - demiH }
+  }
+}
+
 /** Découpe la zone en grille pour ranger toutes les fenêtres ouvertes. */
 export function grilleMosaique(
   n: number,
@@ -127,6 +184,7 @@ interface EtatFenetres {
   focaliser: (id: IdFenetre) => void
   deplacer: (id: IdFenetre, x: number, y: number) => void
   redimensionner: (id: IdFenetre, g: Geometrie) => void
+  ancrer: (id: IdFenetre, cote: CoteAncrage) => void
   basculerReduction: (id: IdFenetre) => void
   basculerAgrandissement: (id: IdFenetre) => void
   mosaique: () => void
@@ -246,9 +304,30 @@ export const storeFenetres = createStore<EtatFenetres>((set, get) => {
     redimensionner: (id, g) =>
       appliquer(
         get().fenetres.map((f) =>
-          f.id === id ? { ...f, ...clamperGeometrie(g, zoneCourante()) } : f,
+          f.id === id
+            ? // Redimensionner à la main sort de l'état ancré/agrandi : la
+              // géométrie de restauration n'a plus de sens.
+              { ...f, ...clamperGeometrie(g, zoneCourante()), avantAgrandissement: undefined }
+            : f,
         ),
       ),
+
+    ancrer: (id, cote) => {
+      const zone = zoneCourante()
+      appliquer(
+        get().fenetres.map((f) => {
+          if (f.id !== id) return f
+          return {
+            ...f,
+            ...clamperGeometrie(geometrieAncrage(cote, zone), zone),
+            // La géométrie d'avant le PREMIER ancrage : enchaîner gauche puis
+            // droite ne doit pas faire d'une moitié la taille « d'origine ».
+            avantAgrandissement:
+              f.avantAgrandissement ?? { x: f.x, y: f.y, largeur: f.largeur, hauteur: f.hauteur },
+          }
+        }),
+      )
+    },
 
     basculerReduction: (id) =>
       appliquer(get().fenetres.map((f) => (f.id === id ? { ...f, reduite: !f.reduite } : f))),
