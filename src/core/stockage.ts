@@ -1,4 +1,4 @@
-import { analyserEtat, type EtatCorpus } from './types'
+import { analyserEtat, type EtatCorpus, VERSION_ETAT } from './types'
 
 /**
  * Persistance locale.
@@ -12,10 +12,66 @@ import { analyserEtat, type EtatCorpus } from './types'
  * synchrone, ce qui bloquerait le rendu à chaque écriture.
  */
 
+export interface DocumentStocke {
+  format: 1
+  revision: number
+  etat: EtatCorpus
+}
+
+export type ResultatChargement =
+  | { statut: 'absent'; revision: 0 }
+  | { statut: 'charge'; etat: EtatCorpus; revision: number }
+  | { statut: 'corrompu'; brut: unknown }
+  | { statut: 'incompatible'; brut: unknown; version: number }
+
+export class ConflitStockage extends Error {
+  constructor() {
+    super('La révision stockée a changé.')
+    this.name = 'ConflitStockage'
+  }
+}
+
+function versionDeclaree(brut: unknown): number | undefined {
+  if (typeof brut !== 'object' || brut === null) return undefined
+  const candidat = 'etat' in brut ? brut.etat : brut
+  if (typeof candidat !== 'object' || candidat === null || !('version' in candidat)) return undefined
+  return typeof candidat.version === 'number' && Number.isInteger(candidat.version)
+    ? candidat.version
+    : undefined
+}
+
+export function decoderValeurStockee(brut: unknown): ResultatChargement {
+  if (brut === undefined) return { statut: 'absent', revision: 0 }
+
+  if (
+    typeof brut === 'object' &&
+    brut !== null &&
+    'format' in brut &&
+    brut.format === 1 &&
+    'revision' in brut &&
+    typeof brut.revision === 'number' &&
+    brut.revision >= 0 &&
+    'etat' in brut
+  ) {
+    const etat = analyserEtat(brut.etat)
+    if (etat !== null) return { statut: 'charge', etat, revision: brut.revision }
+  }
+
+  const etatHistorique = analyserEtat(brut)
+  if (etatHistorique !== null) return { statut: 'charge', etat: etatHistorique, revision: 0 }
+
+  const version = versionDeclaree(brut)
+  if (version !== undefined && version !== VERSION_ETAT) {
+    return { statut: 'incompatible', brut, version }
+  }
+
+  return { statut: 'corrompu', brut }
+}
+
 export interface AdaptateurStockage {
-  charger(): Promise<EtatCorpus | null>
-  enregistrer(etat: EtatCorpus): Promise<void>
-  effacer(): Promise<void>
+  charger(): Promise<ResultatChargement>
+  enregistrer(etat: EtatCorpus, revisionAttendue: number): Promise<number>
+  effacer(revisionAttendue: number): Promise<number>
 }
 
 const NOM_BASE = 'corpus'
@@ -90,58 +146,161 @@ export async function supprimerCle(magasin: Magasin, cle: string): Promise<void>
   }
 }
 
+function modifierEtatAtomiquement<T>(
+  modifier: (
+    magasin: IDBObjectStore,
+    terminer: (resultat: T) => void,
+    echouer: (erreur: unknown) => void,
+  ) => void,
+): Promise<T> {
+  return ouvrir().then(
+    (db) =>
+      new Promise<T>((resoudre, rejeter) => {
+        let resultat: T
+        let termine = false
+
+        const finirAvecErreur = (erreur: unknown) => {
+          if (termine) return
+          termine = true
+          try {
+            tx.abort()
+          } catch {
+            // La transaction peut déjà être terminée.
+          }
+          db.close()
+          rejeter(erreur)
+        }
+
+        let tx: IDBTransaction
+        try {
+          tx = db.transaction(NOM_MAGASIN, 'readwrite')
+        } catch (erreur) {
+          termine = true
+          db.close()
+          rejeter(erreur)
+          return
+        }
+
+        tx.oncomplete = () => {
+          if (termine) return
+          termine = true
+          db.close()
+          resoudre(resultat)
+        }
+        tx.onerror = () => finirAvecErreur(tx.error)
+        tx.onabort = () => finirAvecErreur(tx.error)
+
+        try {
+          modifier(
+            tx.objectStore(NOM_MAGASIN),
+            (valeur) => {
+              if (!termine) resultat = valeur
+            },
+            finirAvecErreur,
+          )
+        } catch (erreur) {
+          finirAvecErreur(erreur)
+        }
+      }),
+  )
+}
+
 /* —————————————————————————— L'état de l'application —————————————————————————— */
 
 class StockageIndexedDB implements AdaptateurStockage {
-  async charger(): Promise<EtatCorpus | null> {
-    try {
-      const brut = await lireCle(NOM_MAGASIN, CLE)
-      if (brut === undefined) return null
-      const etat = analyserEtat(brut)
-      if (etat === null) {
-        // Une donnée illisible vaut mieux ignorée qu'un plantage au démarrage —
-        // mais copiée d'abord : la première mutation de l'état vide qui suivra
-        // écraserait sinon la seule trace des données. La copie n'écrase jamais
-        // un secours existant.
-        try {
-          if ((await lireCle(NOM_MAGASIN, CLE_SECOURS)) === undefined) {
-            await ecrireCle(NOM_MAGASIN, CLE_SECOURS, brut)
+  async charger(): Promise<ResultatChargement> {
+    const brut = await lireCle(NOM_MAGASIN, CLE)
+    const resultat = decoderValeurStockee(brut)
+    if (resultat.statut === 'corrompu' || resultat.statut === 'incompatible') {
+      try {
+        await modifierEtatAtomiquement<void>((magasin, terminer, echouer) => {
+          const lecture = magasin.get(CLE_SECOURS)
+          lecture.onerror = () => echouer(lecture.error)
+          lecture.onsuccess = () => {
+            if (lecture.result === undefined) magasin.put(resultat.brut, CLE_SECOURS)
+            terminer()
           }
-        } catch {
-          // Best effort : ne pas empêcher le démarrage.
-        }
+        })
+      } catch {
+        // Best effort : ne pas empêcher le démarrage.
       }
-      return etat
-    } catch {
-      return null
     }
+    return resultat
   }
 
-  enregistrer(etat: EtatCorpus): Promise<void> {
-    return ecrireCle(NOM_MAGASIN, CLE, etat)
+  async enregistrer(etat: EtatCorpus, revisionAttendue: number): Promise<number> {
+    const revisionSuivante = revisionAttendue + 1
+    await modifierEtatAtomiquement((magasin, terminer, echouer) => {
+      const lecture = magasin.get(CLE)
+      lecture.onerror = () => echouer(lecture.error)
+      lecture.onsuccess = () => {
+        const courant = decoderValeurStockee(lecture.result)
+        if (
+          (courant.statut !== 'absent' && courant.statut !== 'charge') ||
+          courant.revision !== revisionAttendue
+        ) {
+          echouer(new ConflitStockage())
+          return
+        }
+        magasin.put({ format: 1, revision: revisionSuivante, etat } satisfies DocumentStocke, CLE)
+        terminer(revisionSuivante)
+      }
+    })
+    return revisionSuivante
   }
 
-  effacer(): Promise<void> {
-    return supprimerCle(NOM_MAGASIN, CLE)
+  async effacer(revisionAttendue: number): Promise<number> {
+    await modifierEtatAtomiquement((magasin, terminer, echouer) => {
+      const lecture = magasin.get(CLE)
+      lecture.onerror = () => echouer(lecture.error)
+      lecture.onsuccess = () => {
+        const courant = decoderValeurStockee(lecture.result)
+        if (
+          (courant.statut !== 'absent' && courant.statut !== 'charge') ||
+          courant.revision !== revisionAttendue
+        ) {
+          echouer(new ConflitStockage())
+          return
+        }
+        magasin.delete(CLE)
+        terminer(0)
+      }
+    })
+    return 0
   }
 }
 
 /** Repli en mémoire, pour les tests et les contextes sans IndexedDB. */
 export class StockageMemoire implements AdaptateurStockage {
-  private etat: EtatCorpus | null = null
+  private valeur: unknown = undefined
 
-  charger(): Promise<EtatCorpus | null> {
-    return Promise.resolve(this.etat)
+  charger(): Promise<ResultatChargement> {
+    return Promise.resolve(decoderValeurStockee(this.valeur))
   }
 
-  enregistrer(etat: EtatCorpus): Promise<void> {
-    this.etat = etat
-    return Promise.resolve()
+  enregistrer(etat: EtatCorpus, revisionAttendue: number): Promise<number> {
+    const courant = decoderValeurStockee(this.valeur)
+    if (
+      (courant.statut !== 'absent' && courant.statut !== 'charge') ||
+      courant.revision !== revisionAttendue
+    ) {
+      return Promise.reject(new ConflitStockage())
+    }
+    const revisionSuivante = revisionAttendue + 1
+    this.valeur = { format: 1, revision: revisionSuivante, etat } satisfies DocumentStocke
+    return Promise.resolve(revisionSuivante)
   }
 
-  effacer(): Promise<void> {
-    this.etat = null
-    return Promise.resolve()
+  effacer(revisionAttendue: number): Promise<number> {
+    const courant = decoderValeurStockee(this.valeur)
+    if (
+      (courant.statut !== 'absent' && courant.statut !== 'charge') ||
+      courant.revision !== revisionAttendue
+    ) {
+      return Promise.reject(new ConflitStockage())
+    }
+    this.valeur = undefined
+    return Promise.resolve(0)
   }
 }
 
