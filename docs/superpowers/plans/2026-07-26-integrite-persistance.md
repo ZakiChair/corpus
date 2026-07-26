@@ -58,7 +58,7 @@ describe('version de l’état Corpus', () => {
 
 - [ ] **Step 2: Run the test and verify RED**
 
-Run: `npx vitest run src/core/types.test.ts`  
+Run: `npx vitest run src/core/types.test.ts`
 Expected: the future-version test fails because `analyserEtat` currently accepts every integer version.
 
 - [ ] **Step 3: Require the current version in the schema**
@@ -77,7 +77,7 @@ export const schemaEtatCorpus = z.object({
 
 - [ ] **Step 4: Run the test and verify GREEN**
 
-Run: `npx vitest run src/core/types.test.ts`  
+Run: `npx vitest run src/core/types.test.ts`
 Expected: 2 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -154,7 +154,7 @@ describe('document stocké', () => {
 
 - [ ] **Step 2: Run the tests and verify RED**
 
-Run: `npx vitest run src/core/stockage.test.ts`  
+Run: `npx vitest run src/core/stockage.test.ts`
 Expected: compilation/test failure because the new storage contract does not exist.
 
 - [ ] **Step 3: Add the exact document contract and pure decoder**
@@ -236,7 +236,7 @@ async enregistrer(etat: EtatCorpus, revisionAttendue: number): Promise<number> {
 
 - [ ] **Step 6: Run storage and existing sync tests**
 
-Run: `npx vitest run src/core/stockage.test.ts src/donnees/syncSante.test.ts`  
+Run: `npx vitest run src/core/stockage.test.ts src/donnees/syncSante.test.ts`
 Expected: all tests pass; the generic `lireCle/ecrireCle/supprimerCle` API used by sync remains unchanged.
 
 - [ ] **Step 7: Commit**
@@ -312,7 +312,7 @@ describe('hydratation du store', () => {
 
 - [ ] **Step 2: Run the tests and verify RED**
 
-Run: `npx vitest run src/core/donneesStore.test.ts`  
+Run: `npx vitest run src/core/donneesStore.test.ts`
 Expected: failure because `creerStoreDonnees` and `persistance` do not exist, and pre-hydration mutation currently changes the store.
 
 - [ ] **Step 3: Introduce the persistence state machine**
@@ -348,7 +348,7 @@ At the entry of `muter`, `remplacer`, `genererDemonstration` and `reinitialiser`
 
 - [ ] **Step 5: Run the store tests and verify GREEN**
 
-Run: `npx vitest run src/core/donneesStore.test.ts`  
+Run: `npx vitest run src/core/donneesStore.test.ts`
 Expected: all hydration and mutation-gating tests pass.
 
 - [ ] **Step 6: Commit**
@@ -447,7 +447,7 @@ it('ne confirme pas un effacement qui a échoué', async () => {
 
 - [ ] **Step 2: Run the tests and verify RED**
 
-Run: `npx vitest run src/core/donneesStore.test.ts`  
+Run: `npx vitest run src/core/donneesStore.test.ts`
 Expected: queue/conflict/reset tests fail because writes are fire-and-forget and deletion reports no result.
 
 - [ ] **Step 3: Implement one serialized write loop**
@@ -479,7 +479,7 @@ Update the confirmation handler in `Donnees.tsx` to await the boolean and displa
 
 - [ ] **Step 5: Run focused tests and typecheck**
 
-Run: `npx vitest run src/core/donneesStore.test.ts src/core/stockage.test.ts && npm run typecheck`  
+Run: `npx vitest run src/core/donneesStore.test.ts src/core/stockage.test.ts && npm run typecheck`
 Expected: all focused tests pass and TypeScript reports no error.
 
 - [ ] **Step 6: Commit**
@@ -532,7 +532,7 @@ test('une version future bloque l’édition sans être écrasée', async ({ pag
 
 - [ ] **Step 2: Run the single E2E and verify RED**
 
-Run: `npx playwright test -g "version future bloque"`  
+Run: `npx playwright test -g "version future bloque"`
 Expected: failure because Corpus currently interprets the future document as an empty first launch and exposes the generation buttons.
 
 - [ ] **Step 3: Add the recovery component and hook**
@@ -563,7 +563,7 @@ Move `demarrerSync()` and `demarrerSauvegardeAuto()` into an effect driven by `p
 
 - [ ] **Step 5: Run the E2E and verify GREEN**
 
-Run: `npx playwright test -g "version future bloque"`  
+Run: `npx playwright test -g "version future bloque"`
 Expected: the recovery dialog appears, the raw future object remains byte-for-byte equivalent after JSON serialization, and no generation action is mounted.
 
 - [ ] **Step 6: Write and verify a two-page conflict E2E**
@@ -589,7 +589,7 @@ test('deux onglets signalent un conflit au lieu de perdre des données', async (
 })
 ```
 
-Run: `npx playwright test -g "deux onglets signalent"`  
+Run: `npx playwright test -g "deux onglets signalent"`
 Expected RED before the revision-aware UI is complete if the test was added earlier; expected GREEN now, with the first tab’s 540-day state still persisted.
 
 - [ ] **Step 7: Apply the React quality checklist**
@@ -616,20 +616,20 @@ git commit -m "feat: afficher les erreurs de persistance"
 
 - [ ] **Step 1: Run all source tests**
 
-Run: `npx vitest run src`  
+Run: `npx vitest run src`
 Expected: all source test files pass with zero failed test.
 
 - [ ] **Step 2: Run typecheck and production build**
 
-Run: `npm run typecheck && npm run build`  
+Run: `npm run typecheck && npm run build`
 Expected: both commands exit 0.
 
 - [ ] **Step 3: Run all browser tests**
 
-Run: `npm run test:e2e`  
+Run: `npm run test:e2e`
 Expected: the 9 existing tests plus the 2 persistence tests pass.
 
 - [ ] **Step 4: Verify the worktree and scope**
 
-Run: `git status --short --branch && git diff 1499eeb..HEAD --check && git diff --stat 1499eeb..HEAD`  
+Run: `git status --short --branch && git diff 1499eeb..HEAD --check && git diff --stat 1499eeb..HEAD`
 Expected: no whitespace errors; changes are limited to the design/plan, core persistence/store, recovery UI, Donnees reset handler and tests.
