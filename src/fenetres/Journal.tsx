@@ -4,6 +4,7 @@ import { storeDonnees, TYPES_SAISISSABLES } from '../core/donneesStore'
 import { useEtat } from '../core/hooks'
 import { aujourdhui, formaterJourLong } from '../core/temps'
 import { COULEURS_ANNOTATION, LIBELLES_ANNOTATION, type TypeAnnotation } from '../core/types'
+import { storeIntentions } from '../shell/intentions'
 import { Bouton, EnteteFenetre, Etiquette, PiedNote, Selecteur, Vide } from '../ui/ui'
 
 /**
@@ -114,7 +115,9 @@ export function Journal() {
             {visibles.map((a) => (
               <li
                 key={a.id}
-                className="group flex items-baseline gap-2 border-b border-bord/40 px-3 py-1.5"
+                className="group flex cursor-pointer items-baseline gap-2 border-b border-bord/40 px-3 py-1.5 transition-colors hover:bg-bord/30"
+                title="Voir cette semaine dans SERI"
+                onClick={() => storeIntentions.getState().demanderSeries({ centreJour: a.j })}
               >
                 <span className="w-[92px] shrink-0 text-[11px] tabular-nums text-attenue">
                   {formaterJourLong(a.j)}
@@ -130,7 +133,11 @@ export function Journal() {
                 <span className="min-w-0 flex-1 truncate text-[11px] text-texte">{a.note ?? ''}</span>
                 <button
                   type="button"
-                  onClick={() => storeDonnees.getState().supprimerAnnotation(a.id)}
+                  onClick={(e) => {
+                    // Sans quoi supprimer un événement ouvrirait aussi SERI.
+                    e.stopPropagation()
+                    storeDonnees.getState().supprimerAnnotation(a.id)
+                  }}
                   className="shrink-0 text-[11px] text-attenue opacity-0 transition-opacity hover:text-defavorable group-hover:opacity-100"
                   aria-label="Supprimer"
                 >

@@ -27,6 +27,14 @@ export const REGISTRE_FENETRES = [
     description: 'État composite, tuiles par métrique, z-score et rang percentile',
   },
   {
+    id: 'signaux',
+    titre: 'Signaux',
+    mnemonique: 'SIGN',
+    largeur: 560,
+    hauteur: 520,
+    description: 'Ce qui est inhabituel en ce moment : écarts, records, ruptures, charge',
+  },
+  {
     id: 'series',
     titre: 'Séries',
     mnemonique: 'SERI',
@@ -59,6 +67,22 @@ export const REGISTRE_FENETRES = [
     largeur: 760,
     hauteur: 540,
     description: 'Réponse moyenne d’une métrique autour d’un type d’événement',
+  },
+  {
+    id: 'hypotheses',
+    titre: 'Hypothèses',
+    mnemonique: 'HYPO',
+    largeur: 780,
+    hauteur: 520,
+    description: 'Condition sur une métrique, effet médian sur une autre, avec intervalle',
+  },
+  {
+    id: 'comparaison',
+    titre: 'Comparaison',
+    mnemonique: 'COMP',
+    largeur: 700,
+    hauteur: 560,
+    description: 'Ce bloc vs le précédent : écart des médianes de toutes les métriques',
   },
   {
     id: 'saisie',

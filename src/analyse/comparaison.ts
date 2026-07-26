@@ -14,16 +14,16 @@ import { mediane, quantile } from './stats'
  * de données rend toujours le même intervalle, à l'écran comme dans les tests.
  */
 
-export interface ComparaisonPeriode {
-  medianeAncienne: number
-  medianeRecente: number
-  /** Récente − ancienne, en unité de la métrique. */
+export interface EcartEchantillons {
+  medianeA: number
+  medianeB: number
+  /** B − A, en unité de la métrique. */
   delta: number
   /** Intervalle de confiance à 95 % sur cet écart (bootstrap des médianes). */
   icBas: number
   icHaut: number
-  nAncienne: number
-  nRecente: number
+  nA: number
+  nB: number
   /** Vrai quand l'intervalle exclut zéro. */
   significatif: boolean
 }
@@ -42,20 +42,16 @@ function medianeReechantillonnee(valeurs: readonly number[], alea: Alea): number
   return mediane(tirage)
 }
 
-export interface Periode {
-  debut: Jour
-  fin: Jour
-}
-
-export function comparerPeriodes(
-  serie: Serie,
-  ancienne: Periode,
-  recente: Periode,
+/**
+ * Écart des médianes de deux échantillons quelconques. Les périodes (COMP) et
+ * les hypothèses conditionnelles (HYPO) passent toutes les deux par ici.
+ */
+export function comparerEchantillons(
+  a: readonly number[],
+  b: readonly number[],
   graine = 20260726,
-): ComparaisonPeriode | undefined {
-  const a = valeursEntre(serie, ancienne.debut, ancienne.fin)
-  const b = valeursEntre(serie, recente.debut, recente.fin)
-  // Cinq points par période : en deçà, une médiane bootstrap n'a pas de sens.
+): EcartEchantillons | undefined {
+  // Cinq points par groupe : en deçà, une médiane bootstrap n'a pas de sens.
   if (a.length < 5 || b.length < 5) return undefined
 
   const alea = creerAlea(graine)
@@ -67,15 +63,33 @@ export function comparerPeriodes(
   const icHaut = quantile(deltas, 0.975)
 
   return {
-    medianeAncienne: mediane(a),
-    medianeRecente: mediane(b),
+    medianeA: mediane(a),
+    medianeB: mediane(b),
     delta: mediane(b) - mediane(a),
     icBas,
     icHaut,
-    nAncienne: a.length,
-    nRecente: b.length,
+    nA: a.length,
+    nB: b.length,
     significatif: icBas > 0 || icHaut < 0,
   }
+}
+
+export interface Periode {
+  debut: Jour
+  fin: Jour
+}
+
+export function comparerPeriodes(
+  serie: Serie,
+  ancienne: Periode,
+  recente: Periode,
+  graine = 20260726,
+): EcartEchantillons | undefined {
+  return comparerEchantillons(
+    valeursEntre(serie, ancienne.debut, ancienne.fin),
+    valeursEntre(serie, recente.debut, recente.fin),
+    graine,
+  )
 }
 
 /**

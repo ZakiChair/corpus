@@ -23,6 +23,7 @@ import {
 import { serie as lireSerie, seriesRenseignees } from '../core/series'
 import { formaterJourCourt, formaterJourLong } from '../core/temps'
 import type { Serie } from '../core/types'
+import { storeIntentions } from '../shell/intentions'
 import { nomJetonSerie } from '../ui/jetonsCanvas'
 import { BarreEcart, EnteteFenetre, PiedNote, Segments, Sparkline, Vide } from '../ui/ui'
 
@@ -234,9 +235,18 @@ function Tuile({
         : '--c-defavorable'
 
   return (
-    <div className="rounded border border-bord bg-elevee/40 px-2.5 py-2">
+    <div
+      className="cursor-pointer rounded border border-bord bg-elevee/40 px-2.5 py-2 transition-colors hover:border-accent/50"
+      role="button"
+      tabIndex={0}
+      title={`${def.label} — ouvrir dans SERI`}
+      onClick={() => storeIntentions.getState().demanderSeries({ ids: [def.id] })}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') storeIntentions.getState().demanderSeries({ ids: [def.id] })
+      }}
+    >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-[11px] text-attenue" title={def.label}>
+        <span className="truncate text-[11px] text-attenue">
           {def.abrege}
         </span>
         <span className="shrink-0 text-[10px] text-attenue/70">

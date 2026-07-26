@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from 'zustand'
 import { BANDES_RATIO, bandeDuRatio, calculerCharge, monotonie } from '../analyse/charge'
+import { storeIntentions } from '../shell/intentions'
 import { AVERTISSEMENT } from '../analyse/lecture'
 import { valeurAuJour } from '../analyse/stats'
 import { useEtat } from '../core/hooks'
@@ -210,6 +212,22 @@ export function Charge() {
     return indexVersJour(Math.round(pixelVersValeur(domaine, pointeur.x - MARGE.gauche, l)))
   }, [pointeur, domaine, refCanvas])
 
+  // Réticule partagé avec SERI : même jour, deux fenêtres.
+  useEffect(() => {
+    storeIntentions.getState().definirJourSurvole(jourSurvole)
+  }, [jourSurvole])
+  useEffect(() => () => storeIntentions.getState().definirJourSurvole(null), [])
+  const jourPartage = useStore(storeIntentions, (s) => s.jourSurvole)
+  const xPartage = useMemo(() => {
+    if (!jourPartage || pointeur || !domaine) return null
+    const canvas = refCanvas.current
+    if (!canvas) return null
+    const idx = jourVersIndex(jourPartage)
+    if (idx < domaine.min || idx > domaine.max) return null
+    const l = canvas.getBoundingClientRect().width - MARGE.gauche - MARGE.droite
+    return MARGE.gauche + valeurVersPixel(domaine, idx, l)
+  }, [jourPartage, pointeur, domaine, refCanvas])
+
   if (lireSerie(etat, 'charge_seance').length < 3) {
     return (
       <Vide titre="Pas encore de charge d’entraînement.">
@@ -260,6 +278,12 @@ export function Charge() {
 
       <div className="relative min-h-0 flex-1">
         <canvas ref={refCanvas} className="h-full w-full cursor-crosshair" />
+        {xPartage !== null && (
+          <div
+            className="pointer-events-none absolute top-0 h-full w-px bg-attenue/40"
+            style={{ left: xPartage }}
+          />
+        )}
         {jourSurvole && pointeur && (
           <InfobulleGraphe
             xPix={pointeur.x}

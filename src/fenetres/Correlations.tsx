@@ -10,6 +10,7 @@ import { useEtat } from '../core/hooks'
 import { definitionOuGenerique } from '../core/metriques'
 import { serieAnalyse, seriesRenseignees } from '../core/series'
 import type { Serie } from '../core/types'
+import { storeIntentions } from '../shell/intentions'
 import { hexVersRgb, lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
 import { usePointeurCanvas, useRedessinSurRedimensionnement } from '../ui/useDomaineZoom'
 import { useThemeCanvas } from '../ui/useThemeCanvas'
@@ -273,22 +274,29 @@ export function Correlations() {
         ) : (
           <ul className="space-y-0.5">
             {meilleurs.map((p, i) => (
-              <li key={i} className="flex items-baseline gap-2 text-[11px]">
-                <span
-                  className="w-12 shrink-0 tabular-nums"
-                  style={{ color: p.r >= 0 ? 'var(--c-accent)' : 'var(--c-serie4)' }}
+              <li key={i}>
+                <button
+                  type="button"
+                  title="Tracer les deux séries dans SERI"
+                  onClick={() => storeIntentions.getState().demanderSeries({ ids: [p.a, p.b] })}
+                  className="flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-[11px] transition-colors hover:bg-bord/40"
                 >
-                  {p.r >= 0 ? '+' : ''}
-                  {p.r.toFixed(2)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-texte">
-                  {definitionOuGenerique(p.a).label}
-                  <span className="text-attenue">
-                    {p.decalage === 0 ? ' le même jour que ' : ` précède de ${p.decalage} j `}
+                  <span
+                    className="w-12 shrink-0 tabular-nums"
+                    style={{ color: p.r >= 0 ? 'var(--c-accent)' : 'var(--c-serie4)' }}
+                  >
+                    {p.r >= 0 ? '+' : ''}
+                    {p.r.toFixed(2)}
                   </span>
-                  {definitionOuGenerique(p.b).label}
-                </span>
-                <span className="shrink-0 text-[10px] text-attenue">n = {p.n}</span>
+                  <span className="min-w-0 flex-1 truncate text-texte">
+                    {definitionOuGenerique(p.a).label}
+                    <span className="text-attenue">
+                      {p.decalage === 0 ? ' le même jour que ' : ` précède de ${p.decalage} j `}
+                    </span>
+                    {definitionOuGenerique(p.b).label}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-attenue">n = {p.n}</span>
+                </button>
               </li>
             ))}
           </ul>

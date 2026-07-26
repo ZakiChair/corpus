@@ -19,6 +19,13 @@ import type { IdFenetre } from './shell/registre'
  */
 const COMPOSANTS: Record<IdFenetre, LazyExoticComponent<ComponentType>> = {
   bilan: lazy(() => import('./fenetres/Bilan').then((m) => ({ default: m.Bilan }))),
+  signaux: lazy(() => import('./fenetres/Signaux').then((m) => ({ default: m.Signaux }))),
+  hypotheses: lazy(() =>
+    import('./fenetres/Hypotheses').then((m) => ({ default: m.Hypotheses })),
+  ),
+  comparaison: lazy(() =>
+    import('./fenetres/ComparaisonPeriodes').then((m) => ({ default: m.ComparaisonPeriodes })),
+  ),
   series: lazy(() => import('./fenetres/Series').then((m) => ({ default: m.Series }))),
   charge: lazy(() => import('./fenetres/Charge').then((m) => ({ default: m.Charge }))),
   correlations: lazy(() =>

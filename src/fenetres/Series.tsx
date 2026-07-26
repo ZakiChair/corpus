@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from 'zustand'
 import { AVERTISSEMENT } from '../analyse/lecture'
+import { storeIntentions } from '../shell/intentions'
 import { ecartType, medianeGlissante, moyenne, valeurAuJour } from '../analyse/stats'
 import { useEtat } from '../core/hooks'
 import { definitionOuGenerique, formaterHeureCoucher, formaterValeur } from '../core/metriques'
@@ -114,6 +116,28 @@ export function Series() {
     const p = PERIODES_STANDARD.find((x) => x.id === refPreset.current)
     if (p) definirDomaine(domainePourPreset(bornes, p.jours))
   }, [bornes?.min, bornes?.max, definirDomaine]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Intention posée par une autre fenêtre (tuile de BLAN, relation de CORR,
+  // événement d'ANNO…) : appliquer la sélection tout de suite, le centrage
+  // au rendu suivant — il a besoin des bornes de la NOUVELLE sélection.
+  const intention = useStore(storeIntentions, (s) => s.series)
+  const [centreEnAttente, setCentreEnAttente] = useState<string | null>(null)
+  useEffect(() => {
+    if (!intention) return
+    if (intention.ids && intention.ids.length > 0) {
+      const valides = intention.ids.filter((id) => disponibles.includes(id))
+      if (valides.length > 0) setSelection(valides)
+    }
+    if (intention.centreJour) setCentreEnAttente(intention.centreJour)
+    storeIntentions.getState().consommerSeries()
+  }, [intention, disponibles])
+  useEffect(() => {
+    if (!centreEnAttente || !bornes) return
+    const centre = jourVersIndex(centreEnAttente)
+    definirDomaine({ min: centre - 21, max: centre + 21 })
+    setPreset(null)
+    setCentreEnAttente(null)
+  }, [centreEnAttente, bornes, definirDomaine])
 
   // Séries transformées une seule fois : normaliser à chaque frame de dessin
   // recalculerait moyenne et écart-type soixante fois par seconde.
@@ -270,6 +294,22 @@ export function Series() {
     return indexVersJour(idx)
   }, [pointeur, domaine, refCanvas])
 
+  // Réticule partagé : ce que je survole se voit dans LOAD, et inversement.
+  useEffect(() => {
+    storeIntentions.getState().definirJourSurvole(jourSurvole)
+  }, [jourSurvole])
+  useEffect(() => () => storeIntentions.getState().definirJourSurvole(null), [])
+  const jourPartage = useStore(storeIntentions, (s) => s.jourSurvole)
+  const xPartage = useMemo(() => {
+    if (!jourPartage || pointeur || !domaine) return null
+    const canvas = refCanvas.current
+    if (!canvas) return null
+    const idx = jourVersIndex(jourPartage)
+    if (idx < domaine.min || idx > domaine.max) return null
+    const l = canvas.getBoundingClientRect().width - MARGE.gauche - MARGE.droite
+    return MARGE.gauche + valeurVersPixel(domaine, idx, l)
+  }, [jourPartage, pointeur, domaine, refCanvas])
+
   if (disponibles.length === 0) {
     return (
       <Vide titre="Aucune série à tracer.">
@@ -327,6 +367,12 @@ export function Series() {
 
       <div className="relative min-h-0 flex-1">
         <canvas ref={refCanvas} className="h-full w-full cursor-crosshair" />
+        {xPartage !== null && (
+          <div
+            className="pointer-events-none absolute top-0 h-full w-px bg-attenue/40"
+            style={{ left: xPartage }}
+          />
+        )}
         {jourSurvole && pointeur && domaine && (
           <InfobulleGraphe
             xPix={pointeur.x}

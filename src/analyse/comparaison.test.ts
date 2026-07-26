@@ -22,7 +22,7 @@ describe('comparerPeriodes', () => {
     expect(r.delta).toBeCloseTo(8, 0)
     expect(r.significatif).toBe(true)
     expect(r.icBas).toBeGreaterThan(0)
-    expect(r.nAncienne).toBe(28)
+    expect(r.nA).toBe(28)
   })
 
   it('ne fabrique pas d’écart sur deux périodes semblables', () => {
