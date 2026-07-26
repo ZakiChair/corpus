@@ -142,7 +142,9 @@ export const METRIQUES = [
   {
     id: 'tour_taille',
     label: 'Tour de taille',
-    abrege: 'Taille',
+    // « Taille » seul serait ambigu : en français le mot désigne aussi la
+    // stature, et « Taille 78 cm » se lirait comme une hauteur absurde.
+    abrege: 'Tour taille',
     unite: 'cm',
     famille: 'morphologie',
     sens: 'bas',
@@ -251,6 +253,20 @@ export function definitionOuGenerique(id: string): DefinitionMetrique {
 
 export function metriquesParFamille(famille: Famille): readonly DefinitionMetrique[] {
   return METRIQUES.filter((m) => m.famille === famille)
+}
+
+/**
+ * Le catalogue vu au type large.
+ *
+ * `as const satisfies` donne à chaque entrée son type littéral exact : une
+ * entrée qui ne déclare pas `saisieManuelle` n'a tout simplement pas la
+ * propriété, et y accéder ne compile pas. Cette vue élargie sert aux
+ * traitements génériques ; le tableau littéral reste la source de vérité.
+ */
+export const CATALOGUE: readonly DefinitionMetrique[] = METRIQUES
+
+export function metriquesSaisissables(): readonly DefinitionMetrique[] {
+  return CATALOGUE.filter((m) => m.saisieManuelle)
 }
 
 export const FAMILLES: readonly Famille[] = [

@@ -189,13 +189,22 @@ export function zScoreGlissant(serie: Serie, jours: number, minimum = 7): Serie 
 }
 
 /**
- * Moyenne mobile exponentielle sur des points CONSÉCUTIFS du tableau.
- * Pour une série trouée, densifier d'abord (cf. `densifier`) : c'est ce que
- * fait le module de charge, où un jour sans séance vaut zéro et non « absent ».
+ * Lissage exponentiel de constante de temps `tau`, sur des points CONSÉCUTIFS.
+ *
+ * Le facteur vaut 1/tau, et non 2/(tau+1). La distinction n'est pas cosmétique :
+ * 2/(n+1) est la convention des moyennes mobiles FINANCIÈRES, tandis que la
+ * physiologie de l'entraînement (Banister, puis TrainingPeaks) définit la
+ * fatigue par `aujourd'hui += (charge − aujourd'hui) / tau`. Pour tau = 7 cela
+ * fait 0,143 contre 0,25 : la version financière réagit presque deux fois plus
+ * vite et produirait une charge aiguë en dents de scie. Les deux s'appellent
+ * « EMA », d'où le piège en transposant un outil d'un domaine à l'autre.
+ *
+ * Pour une série trouée, densifier d'abord (cf. `densifier`) : un jour sans
+ * séance vaut zéro, pas « absent ».
  */
-export function ema(serie: Serie, periode: number): Serie {
-  if (serie.length === 0 || periode <= 0) return []
-  const alpha = 2 / (periode + 1)
+export function lissageExponentiel(serie: Serie, tau: number): Serie {
+  if (serie.length === 0 || tau <= 0) return []
+  const alpha = 1 / tau
   const sortie: Serie = []
   let courant = serie[0]!.v
   sortie.push({ j: serie[0]!.j, v: courant })

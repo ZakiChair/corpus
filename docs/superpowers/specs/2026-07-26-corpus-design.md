@@ -65,14 +65,21 @@ métrique — et alors la matrice de corrélation serait nulle, les études d'é
 les régimes constants. L'application paraîtrait cassée alors que le code serait juste.
 
 Le générateur simule donc un **modèle causal explicite** dans lequel sont injectés les
-effets exacts que les fenêtres doivent retrouver :
+effets exacts que les fenêtres doivent retrouver.
 
-- dette de sommeil du jour J → VFC déprimée à J+1 (décalage de 1 jour) ;
-- séance lourde → fréquence de repos en hausse et VFC en baisse sur J+1 et J+2, rebond à J+3 ;
-- annotation « alcool » → pic net de fréquence de repos à J+1 ;
+La convention temporelle est posée d'abord, parce qu'elle détermine tous les décalages :
+la ligne du jour J porte **la nuit qui s'achève le matin J** et **l'activité de la journée
+J**. Sommeil et VFC sont donc mesurés le même matin et n'ont aucun décalage entre eux,
+tandis qu'une séance faite l'après-midi ne peut se lire que sur la mesure du lendemain.
+
+- charge du jour J → VFC déprimée le matin J+1 ;
+- soirée alcoolisée le soir J → pic de fréquence au repos le matin J+1 ;
+- courbatures maximales à J+1, résiduelles à J+2 ;
+- dette de sommeil accumulée → VFC du même matin ;
 - rythme hebdomadaire : grasse matinée le week-end ;
-- tendance lente du poids, bruit de rétention d'eau corrélé à la charge ;
-- deux épisodes de maladie : effondrement multi-jours de la VFC.
+- tendance lente du poids sur trois phases, avec un bruit de rétention d'eau corrélé à la
+  charge et à l'alcool ;
+- épisodes de maladie : effondrement multi-jours de la VFC.
 
 Ces effets injectés deviennent les assertions des tests : un test qui vérifie que le module
 de corrélation retrouve le décalage de 1 jour est à la fois un vrai test unitaire et la

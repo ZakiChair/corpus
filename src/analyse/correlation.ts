@@ -89,11 +89,25 @@ export function profilDecalage(
 }
 
 /**
+ * Marge dont un pic doit dépasser la corrélation contemporaine pour qu'on
+ * accepte de parler de décalage.
+ */
+export const MARGE_PIC = 0.04
+
+/**
  * Décalage qui maximise la corrélation en valeur absolue.
  *
  * `minimumPaires` écarte les décalages trop peu appariés : sur des séries
  * courtes, les décalages extrêmes n'ont que quelques paires et produisent des
  * corrélations élevées par pur hasard.
+ *
+ * `margePic` protège d'une illusion beaucoup plus insidieuse. Deux séries à
+ * forte tendance — le poids et la masse grasse pendant une sèche — corrèlent
+ * à 0,95 à TOUS les décalages. Prendre l'argmax d'un profil plat revient alors
+ * à tirer au sort, puis à présenter le tirage comme une découverte : « le poids
+ * précède la masse grasse de 4 jours ». On n'annonce donc un décalage que si
+ * son pic dépasse nettement la valeur contemporaine ; sinon on rend le
+ * décalage nul, qui est la lecture honnête.
  */
 export function meilleurDecalage(
   a: Serie,
@@ -101,12 +115,18 @@ export function meilleurDecalage(
   decalageMax = 7,
   methode: Methode = 'spearman',
   minimumPaires = 20,
+  margePic = MARGE_PIC,
 ): Correlation | undefined {
-  const candidats = profilDecalage(a, b, decalageMax, methode).filter(
-    (c) => Number.isFinite(c.r) && c.n >= minimumPaires,
-  )
+  const profil = profilDecalage(a, b, decalageMax, methode)
+  const candidats = profil.filter((c) => Number.isFinite(c.r) && c.n >= minimumPaires)
   if (candidats.length === 0) return undefined
-  return candidats.reduce((meilleur, c) => (Math.abs(c.r) > Math.abs(meilleur.r) ? c : meilleur))
+
+  const meilleur = candidats.reduce((m, c) => (Math.abs(c.r) > Math.abs(m.r) ? c : m))
+  if (meilleur.decalage === 0) return meilleur
+
+  const contemporain = candidats.find((c) => c.decalage === 0)
+  if (!contemporain) return meilleur
+  return Math.abs(meilleur.r) - Math.abs(contemporain.r) < margePic ? contemporain : meilleur
 }
 
 /**

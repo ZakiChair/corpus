@@ -1,6 +1,12 @@
 import { jourVersIndex, type Jour } from '../core/temps'
 import type { Serie } from '../core/types'
-import { ecartType, ema, fenetreGlissante, moyenne, moyenneGlissante } from './stats'
+import {
+  ecartType,
+  fenetreGlissante,
+  lissageExponentiel,
+  moyenne,
+  moyenneGlissante,
+} from './stats'
 
 /**
  * Charge d'entraînement.
@@ -46,8 +52,8 @@ export function calculerCharge(serieDense: Serie): Charge {
     return { aigue: [], chronique: [], forme: [], ratio: [] }
   }
 
-  const aigue = ema(serieDense, PERIODE_AIGUE)
-  const chronique = ema(serieDense, PERIODE_CHRONIQUE)
+  const aigue = lissageExponentiel(serieDense, PERIODE_AIGUE)
+  const chronique = lissageExponentiel(serieDense, PERIODE_CHRONIQUE)
 
   const chroniqueParJour = new Map<Jour, number>(chronique.map((p) => [p.j, p.v]))
   const forme: Serie = aigue

@@ -6,7 +6,7 @@ import {
   derniersJours,
   ecartAbsoluMedian,
   ecartType,
-  ema,
+  lissageExponentiel,
   fenetreGlissante,
   mediane,
   moyenne,
@@ -169,20 +169,28 @@ describe('zScoreGlissant', () => {
   })
 })
 
-describe('ema', () => {
+describe('lissageExponentiel', () => {
   it('démarre sur la première valeur et converge vers un palier', () => {
     const serie = serieDepuis('2026-01-01', Array.from({ length: 100 }, () => 50))
-    const e = ema(serie, 7)
+    const e = lissageExponentiel(serie, 7)
     expect(e[0]!.v).toBe(50)
     expect(e[99]!.v).toBeCloseTo(50, 8)
   })
 
-  it('réagit plus vite avec une période courte', () => {
+  it('réagit plus vite avec une constante de temps courte', () => {
     const valeurs = [0, 0, 0, 0, 0, 100, 100, 100]
     const serie = serieDepuis('2026-01-01', valeurs)
-    const rapide = ema(serie, 3)
-    const lente = ema(serie, 30)
+    const rapide = lissageExponentiel(serie, 3)
+    const lente = lissageExponentiel(serie, 30)
     expect(rapide[7]!.v).toBeGreaterThan(lente[7]!.v)
+  })
+
+  it('utilise le facteur 1/tau et non la convention financière 2/(tau+1)', () => {
+    // Échelon de 0 vers 100 : après un pas, la valeur vaut exactement alpha × 100.
+    const serie = serieDepuis('2026-01-01', [0, 100])
+    expect(lissageExponentiel(serie, 7)[1]!.v).toBeCloseTo(100 / 7, 10)
+    // La convention financière donnerait 25, soit près du double.
+    expect(lissageExponentiel(serie, 7)[1]!.v).toBeLessThan(20)
   })
 })
 
