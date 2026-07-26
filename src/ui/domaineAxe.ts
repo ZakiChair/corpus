@@ -105,13 +105,23 @@ export function graduations(min: number, max: number, cible = 5): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return []
   const brut = (max - min) / Math.max(1, cible)
   const magnitude = 10 ** Math.floor(Math.log10(brut))
+  // Pas normalisé dans [1, 10), arrondi VERS LE HAUT au prochain nombre rond.
+  // Arrondir vers le bas donnerait plus de graduations que demandé ; se
+  // tromper de sens en donne beaucoup moins (un pas brut de 20 devenait 50,
+  // soit trois graduations au lieu de cinq).
   const normalise = brut / magnitude
-  const pas = (normalise >= 5 ? 10 : normalise >= 2 ? 5 : normalise >= 1 ? 2 : 1) * magnitude
+  const pas = (normalise <= 1 ? 1 : normalise <= 2 ? 2 : normalise <= 5 ? 5 : 10) * magnitude
+  // Le pas vaut toujours 1, 2 ou 5 fois une puissance de dix : le nombre de
+  // décimales utiles s'en déduit exactement. Sans cet arrondi, l'accumulation
+  // flottante produit des graduations comme 0,6000000000000001 — et une
+  // fonction qui promet des nombres ronds doit en rendre, plutôt que de
+  // laisser chaque appelant s'en défendre au formatage.
+  const decimales = Math.max(0, Math.min(12, -Math.floor(Math.log10(pas))))
   const out: number[] = []
-  const premier = Math.ceil(min / pas) * pas
-  for (let v = premier; v <= max + pas * 1e-9; v += pas) {
-    // L'accumulation flottante fait dériver la valeur : on la réaligne.
-    out.push(Math.round(v / pas) * pas)
+  const premierIndice = Math.ceil(min / pas)
+  const dernierIndice = Math.floor((max + pas * 1e-9) / pas)
+  for (let k = premierIndice; k <= dernierIndice; k++) {
+    out.push(Number((k * pas).toFixed(decimales)))
   }
   return out
 }
