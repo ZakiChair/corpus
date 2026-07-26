@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+
+/*
+ * Thèmes CORPUS.
+ * Chaque thème définit les mêmes jetons. Le canvas ne voit pas les classes
+ * Tailwind : il lit ces propriétés personnalisées au moment du dessin
+ * (cf. src/ui/jetonsCanvas.ts). D'où le fait que tout jeton utilisé dans un
+ * graphe DOIT exister ici en valeur hexadécimale résolue.
+ */
+
+@theme inline {
+  --color-fond: var(--c-fond);
+  --color-surface: var(--c-surface);
+  --color-elevee: var(--c-elevee);
+  --color-bord: var(--c-bord);
+  --color-texte: var(--c-texte);
+  --color-attenue: var(--c-attenue);
+  --color-accent: var(--c-accent);
+  --color-favorable: var(--c-favorable);
+  --color-defavorable: var(--c-defavorable);
+  --color-alerte: var(--c-alerte);
+  --color-serie1: var(--c-serie1);
+  --color-serie2: var(--c-serie2);
+  --color-serie3: var(--c-serie3);
+  --color-serie4: var(--c-serie4);
+  --color-serie5: var(--c-serie5);
+  --color-serie6: var(--c-serie6);
+
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* — Nuit : le thème par défaut, sombre et clinique — */
+:root,
+[data-theme='nuit'] {
+  --c-fond: #07090d;
+  --c-surface: #0e1219;
+  --c-elevee: #151b25;
+  --c-bord: #232c3a;
+  --c-texte: #dfe6f0;
+  --c-attenue: #6d7b90;
+  --c-accent: #3ddbd9;
+  --c-favorable: #46d39a;
+  --c-defavorable: #ff5c72;
+  --c-alerte: #ffb545;
+  --c-serie1: #3ddbd9;
+  --c-serie2: #a78bfa;
+  --c-serie3: #fbbf5c;
+  --c-serie4: #f472b6;
+  --c-serie5: #60a5fa;
+  --c-serie6: #4ade80;
+  --c-grille: #1b2330;
+}
+
+/* — Ambre : hommage au terminal Bloomberg — */
+[data-theme='ambre'] {
+  --c-fond: #000000;
+  --c-surface: #0a0700;
+  --c-elevee: #140e00;
+  --c-bord: #3a2a00;
+  --c-texte: #ffb000;
+  --c-attenue: #8a6000;
+  --c-accent: #ffcf4d;
+  --c-favorable: #3fbf5f;
+  --c-defavorable: #ff4d4d;
+  --c-alerte: #ffe08a;
+  --c-serie1: #ffb000;
+  --c-serie2: #ff7b00;
+  --c-serie3: #ffe08a;
+  --c-serie4: #d98cff;
+  --c-serie5: #66ccff;
+  --c-serie6: #78e08f;
+  --c-grille: #241a00;
+}
+
+/* — Phosphore : tube cathodique vert — */
+[data-theme='phosphore'] {
+  --c-fond: #000600;
+  --c-surface: #021002;
+  --c-elevee: #041b04;
+  --c-bord: #0d3d10;
+  --c-texte: #4dff6a;
+  --c-attenue: #2a8f39;
+  --c-accent: #8affa0;
+  --c-favorable: #6dff88;
+  --c-defavorable: #ff6b6b;
+  --c-alerte: #eaff6b;
+  --c-serie1: #4dff6a;
+  --c-serie2: #8affa0;
+  --c-serie3: #eaff6b;
+  --c-serie4: #6bffd5;
+  --c-serie5: #b6ff4d;
+  --c-serie6: #38d94f;
+  --c-grille: #0a2b0c;
+}
+
+/* — Clinique : clair, pour lire en plein jour — */
+[data-theme='clinique'] {
+  --c-fond: #f4f6fa;
+  --c-surface: #ffffff;
+  --c-elevee: #eef1f7;
+  --c-bord: #d3dae6;
+  --c-texte: #16202e;
+  --c-attenue: #64748b;
+  --c-accent: #0d9488;
+  --c-favorable: #16a34a;
+  --c-defavorable: #dc2626;
+  --c-alerte: #d97706;
+  --c-serie1: #0d9488;
+  --c-serie2: #7c3aed;
+  --c-serie3: #d97706;
+  --c-serie4: #db2777;
+  --c-serie5: #2563eb;
+  --c-serie6: #16a34a;
+  --c-grille: #e2e8f0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--c-fond);
+  color: var(--c-texte);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barres de défilement discrètes, cohérentes avec le thème. */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--c-bord);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-attenue);
+}
+
+/* Le curseur de redimensionnement doit survivre au survol des enfants. */
+.corpus-redim {
+  touch-action: none;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Champs numériques : masquer les flèches, elles cassent l'alignement. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  appearance: textfield;
+}
