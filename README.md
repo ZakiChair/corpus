@@ -34,7 +34,10 @@ conditionnel. La finance quantitative les traite depuis quarante ans.
 ## Fenêtres
 
 Chaque fenêtre a un mnémonique de quatre lettres, comme sur un terminal. `⌘K` ouvre la
-palette, le menu **Fenêtres** les liste toutes.
+palette, le menu **Fenêtres** les liste toutes. Glisser une fenêtre contre un bord
+l'ancre — moitié d'écran sur les bords gauche et droit, quart à leurs extrémités,
+plein écran en haut — et la ré-attraper lui rend sa taille d'avant. Double-clic sur
+la barre de titre : agrandir.
 
 | | | |
 |---|---|---|
@@ -100,9 +103,21 @@ mécaniquement l'anomalie qu'on cherche à détecter.
 | Format | État |
 |---|---|
 | **Apple Santé** | L'`export.zip` tel que l'app le produit (Profil → Exporter toutes les données), ou l'`export.xml` qu'il contient. Lecture en flux avec progression et annulation. |
+| **Health Auto Export** | Le JSON de l'app iOS du même nom — c'est le format de la synchronisation continue ci-dessous, accepté aussi en dépôt manuel. |
 | CSV | Séparateur, format de date et virgule décimale détectés. Conventions suisses comprises (`26.07.2026`, `74,7`, `12'480`). |
 | Profil ATHLOS | Le JSON exporté par ATHLOS. Poids et tour de taille rejoignent le catalogue, les métriques de performance sont conservées telles quelles, les séances deviennent des annotations. |
-| Sauvegarde CORPUS | Le JSON exporté depuis `DONN`. |
+| Sauvegarde CORPUS | Le JSON exporté depuis `DONN`. Si des données existent déjà, la restauration se confirme — remplacer ou fusionner. |
+
+### Synchronisation continue (Apple Watch « en direct »)
+
+Une app web locale ne peut pas parler à HealthKit ; le chemin vivant passe par un
+dossier. Sur l'iPhone, **Health Auto Export** (ou un raccourci planifié) dépose un
+export JSON/CSV dans iCloud Drive à intervalle régulier ; le dossier arrive sur le
+Mac ; CORPUS le surveille (`DONN` → Synchronisation continue) et importe les
+nouveaux fichiers chaque minute. File System Access API — navigateurs Chromium
+uniquement. Dans le Finder, garder le dossier en « Toujours conserver sur ce Mac »,
+sinon iCloud garde les fichiers dans le nuage et la lecture échoue. Une sauvegarde
+CORPUS déposée dans ce dossier n'est jamais appliquée automatiquement.
 
 Les dates ambiguës sont lues **jour avant mois** (convention européenne) : `03/12/2026`
 est le 3 décembre.
@@ -124,13 +139,17 @@ pas, les quatre métriques de sommeil, les séances, et le profil (naissance, se
 Les types non pris en charge — la fréquence cardiaque instantanée surtout, de loin la plus
 volumineuse — sont comptés puis ignorés, et la fenêtre le signale.
 
-Trois conventions à connaître :
+Quatre conventions à connaître :
 
 - **Agrégation par métrique.** Les pas sont **sommés** sur la journée, tout le reste est
   **médiané**. Une médiane sur les pas donnerait un chiffre plausible et faux.
+- **Les pas se dédoublonnent par source.** iPhone et Apple Watch comptent chacun les
+  mêmes pas ; additionner les appareils doublerait la journée. La source la plus fournie
+  du jour est retenue — elle peut légèrement sous-estimer, jamais doubler.
 - **Une nuit appartient au jour du réveil.** Les segments sont regroupés en sessions (moins
   d'une heure d'écart), la durée est l'**union** des intervalles — sinon une montre et une
-  application tierce couvrant la même nuit la compteraient deux fois.
+  application tierce couvrant la même nuit la compteraient deux fois. Les micro-éveils de
+  moins de deux minutes ne comptent pas comme réveils.
 - **La masse grasse est ambiguë** : Apple écrit `unit="%"` avec tantôt `15.2`, tantôt
   `0.152`. La décision se prend sur **tout le fichier** — si son maximum est ≤ 1, il est en
   fractions — et jamais enregistrement par enregistrement.
