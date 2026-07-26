@@ -8,6 +8,7 @@ import { LIBELLES_ANNOTATION, type TypeAnnotation } from '../core/types'
 import { avecMarge, graduations } from '../ui/domaineAxe'
 import { hexVersRgb, lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
 import { useRedessinSurRedimensionnement } from '../ui/useDomaineZoom'
+import { useThemeCanvas } from '../ui/useThemeCanvas'
 import { EnteteFenetre, PiedNote, Selecteur, Vide } from '../ui/ui'
 
 /**
@@ -27,6 +28,7 @@ const MARGE = { gauche: 52, droite: 12, haut: 14, bas: 30 }
 
 export function Evenements() {
   const etat = useEtat()
+  const theme = useThemeCanvas()
   const refCanvas = useRef<HTMLCanvasElement>(null)
 
   const types = useMemo(() => typesPresents(etat), [etat])
@@ -191,7 +193,7 @@ export function Evenements() {
         ctx.fillText(d === 0 ? 'J' : `${d > 0 ? '+' : ''}${d}`, enX(k), MARGE.haut + h + 8)
       }
     },
-    [reponse],
+    [reponse, theme],
   )
 
   useEffect(() => {

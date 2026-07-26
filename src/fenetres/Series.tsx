@@ -22,6 +22,7 @@ import {
   type Domaine,
 } from '../ui/domaineAxe'
 import { couleurSerie, lireJeton, nomJetonSerie, preparerCanvas } from '../ui/jetonsCanvas'
+import { useThemeCanvas } from '../ui/useThemeCanvas'
 import {
   usePointeurCanvas,
   useDomaineZoom,
@@ -64,6 +65,7 @@ const SEUIL_LISSAGE_JOURS = 90
 
 export function Series() {
   const etat = useEtat()
+  const theme = useThemeCanvas()
   const disponibles = useMemo(() => seriesRenseignees(etat), [etat])
   const [selection, setSelection] = useState<string[]>([])
   const [preset, setPreset] = useState<string | null>('90j')
@@ -249,7 +251,7 @@ export function Series() {
         }
       })
     },
-    [domaine, tracees, normalise, etat.annotations, refCanvas],
+    [domaine, tracees, normalise, etat.annotations, refCanvas, theme],
   )
 
   useEffect(() => {

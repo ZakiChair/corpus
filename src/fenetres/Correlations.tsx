@@ -12,6 +12,7 @@ import { serieAnalyse, seriesRenseignees } from '../core/series'
 import type { Serie } from '../core/types'
 import { hexVersRgb, lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
 import { usePointeurCanvas, useRedessinSurRedimensionnement } from '../ui/useDomaineZoom'
+import { useThemeCanvas } from '../ui/useThemeCanvas'
 import { EnteteFenetre, PiedNote, Segments, Vide } from '../ui/ui'
 
 /**
@@ -34,6 +35,7 @@ const PAIRES_MINIMUM = 20
 
 export function Correlations() {
   const etat = useEtat()
+  const theme = useThemeCanvas()
   const [decalage, setDecalage] = useState(0)
   const [methode, setMethode] = useState<Methode>('spearman')
   const refCanvas = useRef<HTMLCanvasElement>(null)
@@ -155,7 +157,7 @@ export function Correlations() {
         ctx.restore()
       }
     },
-    [ids, matrice],
+    [ids, matrice, theme],
   )
 
   useEffect(() => {

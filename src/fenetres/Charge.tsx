@@ -21,6 +21,7 @@ import {
   type Domaine,
 } from '../ui/domaineAxe'
 import { lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
+import { useThemeCanvas } from '../ui/useThemeCanvas'
 import {
   usePointeurCanvas,
   useDomaineZoom,
@@ -51,6 +52,7 @@ const ESPACE_PANNEAUX = 16
 
 export function Charge() {
   const etat = useEtat()
+  const theme = useThemeCanvas()
   const [preset, setPreset] = useState<string | null>('180j')
 
   const dense = useMemo(() => serieAnalyse(etat, 'charge_seance'), [etat])
@@ -191,7 +193,7 @@ export function Charge() {
         }
       }
     },
-    [domaine, charge, refCanvas],
+    [domaine, charge, refCanvas, theme],
   )
 
   useEffect(() => {

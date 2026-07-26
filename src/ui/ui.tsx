@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import type { Serie } from '../core/types'
 import { avecMarge } from './domaineAxe'
 import { lireJeton, preparerCanvas } from './jetonsCanvas'
+import { useThemeCanvas } from './useThemeCanvas'
 
 /* —————————————————————————— Contrôles de base —————————————————————————— */
 
@@ -255,6 +256,9 @@ export function Sparkline({
   remplir?: boolean
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  // Le thème est une dépendance de dessin : sans lui, la courbe garde les
+  // couleurs de l'ancien thème après un changement.
+  const theme = useThemeCanvas()
 
   useEffect(() => {
     const canvas = ref.current
@@ -297,7 +301,7 @@ export function Sparkline({
     ctx.arc(largeur - 1.5, enY(dernier.v), 2, 0, Math.PI * 2)
     ctx.fillStyle = couleur
     ctx.fill()
-  }, [serie, jeton, remplir])
+  }, [serie, jeton, remplir, theme])
 
   return <canvas ref={ref} className="w-full" style={{ height: hauteur }} />
 }
