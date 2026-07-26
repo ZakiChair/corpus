@@ -74,7 +74,7 @@ export type Profil = z.infer<typeof schemaProfil>
 export const VERSION_ETAT = 1
 
 export const schemaEtatCorpus = z.object({
-  version: z.number().int(),
+  version: z.literal(VERSION_ETAT),
   series: z.record(z.string(), schemaSerie),
   annotations: z.array(schemaAnnotation),
   profil: schemaProfil,
