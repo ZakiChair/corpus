@@ -113,6 +113,28 @@ describe('hydratation du store', () => {
     expect(store.getState().etat).toBe(avant)
     expect(store.getState().persistance).toEqual({ statut: 'version-incompatible', version: 2 })
   })
+
+  it('relit un document incompatible qui a été remplacé avant le nouvel essai', async () => {
+    const etatCharge = etatVide('2026-07-20')
+    etatCharge.series.energie = [{ j: '2026-07-20', v: 7 }]
+    const charger = vi
+      .fn()
+      .mockResolvedValueOnce({ statut: 'incompatible', brut: { version: 2 }, version: 2 })
+      .mockResolvedValueOnce({ statut: 'charge', etat: etatCharge, revision: 4 })
+    const stockage: AdaptateurStockage = {
+      charger,
+      enregistrer: vi.fn(),
+      effacer: vi.fn(),
+    }
+    const store = creerStoreDonnees(stockage)
+
+    await store.getState().hydrater()
+    await store.getState().hydrater()
+
+    expect(charger).toHaveBeenCalledTimes(2)
+    expect(store.getState().etat).toEqual(etatCharge)
+    expect(store.getState().persistance).toEqual({ statut: 'pret', sauvegarde: 'a-jour' })
+  })
 })
 
 describe('blocage des mutations', () => {

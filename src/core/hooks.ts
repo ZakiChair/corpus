@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
-import { storeDonnees } from './donneesStore'
+import { storeDonnees, type EtatPersistance } from './donneesStore'
 import { storeFenetres } from '../shell/gestionnaireFenetres'
 import { storeTheme } from '../shell/theme'
 import { aujourdhui, type Jour } from './temps'
@@ -18,6 +18,10 @@ export function useDonneesVide(): boolean {
 
 export function useHydrate(): boolean {
   return useStore(storeDonnees, (s) => s.hydrate)
+}
+
+export function usePersistance(): EtatPersistance {
+  return useStore(storeDonnees, (s) => s.persistance)
 }
 
 export function useFenetres() {

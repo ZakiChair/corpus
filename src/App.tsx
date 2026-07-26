@@ -1,10 +1,18 @@
-import { lazy, Suspense, useEffect, type ComponentType, type LazyExoticComponent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  type ComponentType,
+  type LazyExoticComponent,
+} from 'react'
 import { storeDonnees } from './core/donneesStore'
-import { useFenetres, useHydrate } from './core/hooks'
+import { useFenetres, usePersistance } from './core/hooks'
 import { demarrerSauvegardeAuto } from './donnees/sauvegardeAuto'
 import { demarrerSync } from './donnees/syncSante'
 import { BarreOutils } from './shell/BarreOutils'
 import { BarreTaches } from './shell/BarreTaches'
+import { EcranPersistance } from './shell/EcranPersistance'
 import { FenetreFlottante } from './shell/FenetreFlottante'
 import { storeFenetres } from './shell/gestionnaireFenetres'
 import { Palette } from './shell/Palette'
@@ -41,23 +49,44 @@ const COMPOSANTS: Record<IdFenetre, LazyExoticComponent<ComponentType>> = {
 }
 
 export function App() {
-  const fenetres = useFenetres()
-  const hydrate = useHydrate()
+  const persistance = usePersistance()
+  const servicesDemarres = useRef(false)
+  const statutPersistance = persistance.statut
 
   useEffect(() => {
-    void storeDonnees.getState().hydrater().then(() => {
-      // Premier lancement : la fenêtre Données est le seul endroit d'où l'on
-      // peut peupler l'application, autant y conduire directement.
-      if (storeDonnees.getState().vide) storeFenetres.getState().ouvrir('donnees')
-      // La synchronisation et la sauvegarde reprennent APRÈS l'hydratation :
-      // un import qui arriverait avant fusionnerait dans un état encore vide,
-      // et une sauvegarde figerait ce vide.
-      void demarrerSync()
-      void demarrerSauvegardeAuto()
-    })
+    void storeDonnees.getState().hydrater()
   }, [])
 
   useEffect(() => {
+    if (statutPersistance !== 'pret' || servicesDemarres.current) return
+    servicesDemarres.current = true
+    // Premier lancement : la fenêtre Données est le seul endroit d'où l'on
+    // peut peupler l'application, autant y conduire directement.
+    if (storeDonnees.getState().vide) storeFenetres.getState().ouvrir('donnees')
+    // Ces deux services peuvent lire ou muter le stockage : ils ne démarrent
+    // qu'après une hydratation sûre, y compris si elle réussit après un retry.
+    void demarrerSync()
+    void demarrerSauvegardeAuto()
+  }, [statutPersistance])
+
+  const bloqueShell = statutPersistance === 'erreur-ecriture' || statutPersistance === 'conflit'
+  if (statutPersistance !== 'pret' && !bloqueShell) {
+    return <EcranPersistance persistance={persistance} />
+  }
+
+  return (
+    <>
+      <Shell bloque={bloqueShell} />
+      {bloqueShell ? <EcranPersistance persistance={persistance} /> : null}
+    </>
+  )
+}
+
+function Shell({ bloque }: { bloque: boolean }) {
+  const fenetres = useFenetres()
+
+  useEffect(() => {
+    if (bloque) return
     // ⌥flèches : ancrer la fenêtre au premier plan sans toucher la souris.
     const clavier = (e: KeyboardEvent) => {
       if (!e.altKey || e.metaKey || e.ctrlKey) return
@@ -77,9 +106,10 @@ export function App() {
     }
     window.addEventListener('keydown', clavier)
     return () => window.removeEventListener('keydown', clavier)
-  }, [])
+  }, [bloque])
 
   useEffect(() => {
+    if (bloque) return
     // Une fenêtre déplacée hors cadre après réduction de la fenêtre du
     // navigateur deviendrait inattrapable : on recadre au redimensionnement.
     const recadrer = () => {
@@ -90,10 +120,14 @@ export function App() {
     }
     window.addEventListener('resize', recadrer)
     return () => window.removeEventListener('resize', recadrer)
-  }, [])
+  }, [bloque])
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-fond">
+    <div
+      className="relative h-full w-full overflow-hidden bg-fond"
+      inert={bloque}
+      aria-hidden={bloque ? true : undefined}
+    >
       <BarreOutils />
 
       <main className="absolute inset-0">
@@ -109,10 +143,10 @@ export function App() {
         })}
       </main>
 
-      {hydrate && fenetres.length === 0 && <EcranVide />}
+      {fenetres.length === 0 ? <EcranVide /> : null}
 
       <BarreTaches />
-      <Palette />
+      {bloque ? null : <Palette />}
     </div>
   )
 }

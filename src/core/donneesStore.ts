@@ -149,7 +149,10 @@ export function creerStoreDonnees(
       persistance: { statut: 'chargement' },
 
       hydrater: () => {
-        if (get().hydrate) return Promise.resolve()
+        const statut = get().persistance.statut
+        if (statut === 'pret' || statut === 'erreur-ecriture' || statut === 'conflit') {
+          return Promise.resolve()
+        }
         if (hydratationActive) return hydratationActive
 
         hydratationActive = (async () => {

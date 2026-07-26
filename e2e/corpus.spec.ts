@@ -8,15 +8,82 @@ import { expect, test, type Page } from '@playwright/test'
  * utilisateur (générer la démonstration) : pas d'état injecté en douce.
  */
 
-async function demarrerAvecDemo(page: Page): Promise<void> {
-  await page.goto('/')
+interface EtatBrut {
+  format?: number
+  revision?: number
+  etat?: { series: Record<string, unknown[]> }
+  [cle: string]: unknown
+}
+
+async function viderCorpus(page: Page): Promise<void> {
   await page.evaluate(async () => {
     localStorage.clear()
-    await new Promise((fin) => {
+    await new Promise<void>((resoudre, rejeter) => {
       const demande = indexedDB.deleteDatabase('corpus')
-      demande.onsuccess = demande.onerror = demande.onblocked = fin
+      demande.onsuccess = () => resoudre()
+      demande.onerror = () => rejeter(demande.error)
     })
   })
+}
+
+async function ecrireEtatBrut(page: Page, valeur: unknown): Promise<void> {
+  await page.evaluate(async (brut) => {
+    const db = await new Promise<IDBDatabase>((resoudre, rejeter) => {
+      const demande = indexedDB.open('corpus', 2)
+      demande.onupgradeneeded = () => {
+        if (!demande.result.objectStoreNames.contains('etat')) {
+          demande.result.createObjectStore('etat')
+        }
+        if (!demande.result.objectStoreNames.contains('sync')) {
+          demande.result.createObjectStore('sync')
+        }
+      }
+      demande.onsuccess = () => resoudre(demande.result)
+      demande.onerror = () => rejeter(demande.error)
+    })
+    try {
+      await new Promise<void>((resoudre, rejeter) => {
+        const transaction = db.transaction('etat', 'readwrite')
+        transaction.objectStore('etat').put(brut, 'courant')
+        transaction.oncomplete = () => resoudre()
+        transaction.onerror = () => rejeter(transaction.error)
+        transaction.onabort = () => rejeter(transaction.error)
+      })
+    } finally {
+      db.close()
+    }
+  }, valeur)
+}
+
+async function lireEtatBrut(page: Page): Promise<EtatBrut | undefined> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resoudre, rejeter) => {
+      const demande = indexedDB.open('corpus', 2)
+      demande.onsuccess = () => resoudre(demande.result)
+      demande.onerror = () => rejeter(demande.error)
+    })
+    try {
+      return await new Promise<EtatBrut | undefined>((resoudre, rejeter) => {
+        const transaction = db.transaction('etat', 'readonly')
+        const demande = transaction.objectStore('etat').get('courant')
+        let resultat: EtatBrut | undefined
+        demande.onsuccess = () => {
+          resultat = demande.result as EtatBrut
+        }
+        demande.onerror = () => rejeter(demande.error)
+        transaction.oncomplete = () => resoudre(resultat)
+        transaction.onerror = () => rejeter(transaction.error)
+        transaction.onabort = () => rejeter(transaction.error)
+      })
+    } finally {
+      db.close()
+    }
+  })
+}
+
+async function demarrerAvecDemo(page: Page): Promise<void> {
+  await page.goto('/')
+  await viderCorpus(page)
   await page.reload()
   // Premier lancement : DONN s'ouvre seule, c'est la porte d'entrée.
   const generer = page.getByRole('button', { name: 'Générer 18 mois' })
@@ -34,6 +101,47 @@ async function ouvrir(page: Page, mnemonique: string): Promise<void> {
   await page.getByPlaceholder('Fenêtre, mnémonique…').fill(mnemonique)
   await page.keyboard.press('Enter')
 }
+
+test('une version future bloque l’édition sans être écrasée', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  const futur = {
+    version: 2,
+    series: {},
+    annotations: [],
+    profil: {},
+    creeLe: '2026-07-26',
+    champFutur: 'à conserver',
+  }
+  await ecrireEtatBrut(page, futur)
+  await page.reload()
+
+  await expect(page.getByRole('alertdialog')).toContainText('version plus récente')
+  await expect(page.getByRole('button', { name: 'Réessayer' })).toBeVisible()
+  expect(await lireEtatBrut(page)).toEqual(futur)
+  await expect(page.getByRole('button', { name: 'Générer 18 mois' })).toHaveCount(0)
+})
+
+test('deux onglets signalent un conflit au lieu de perdre des données', async ({ context, page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await page.reload()
+  const autre = await context.newPage()
+  await autre.goto('/')
+
+  await page.getByRole('button', { name: 'Générer 18 mois' }).click()
+  await expect.poll(async () => (await lireEtatBrut(page))?.revision).toBe(1)
+  const documentAvantConflit = await lireEtatBrut(page)
+  expect(documentAvantConflit).toMatchObject({ format: 1, revision: 1 })
+
+  await autre.getByRole('button', { name: 'Générer 3 ans' }).click()
+  await expect(autre.getByRole('alertdialog')).toContainText('autre onglet')
+  await autre.keyboard.press('Meta+k')
+  await expect(autre.getByPlaceholder('Fenêtre, mnémonique…')).toHaveCount(0)
+
+  const documentApresConflit = await lireEtatBrut(page)
+  expect(documentApresConflit).toEqual(documentAvantConflit)
+})
 
 test('premier lancement, démonstration, et toutes les fenêtres à leur taille par défaut', async ({ page }) => {
   await demarrerAvecDemo(page)
