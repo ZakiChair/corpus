@@ -28,6 +28,13 @@ export interface DefinitionMetrique {
   readonly decimales: number
   /** Proposée dans le formulaire de saisie quotidienne. */
   readonly saisieManuelle?: boolean
+  /**
+   * Un jour sans valeur vaut zéro plutôt que « non mesuré ».
+   * Vrai pour la charge d'entraînement : un jour de repos est une information,
+   * pas une lacune. Faux pour la VFC : une montre non portée ne veut pas dire
+   * que la variabilité était nulle.
+   */
+  readonly absenceVautZero?: boolean
 }
 
 export const LIBELLES_FAMILLE: Record<Famille, string> = {
@@ -154,6 +161,7 @@ export const METRIQUES = [
     max: 1500,
     decimales: 0,
     saisieManuelle: true,
+    absenceVautZero: true,
   },
   {
     id: 'pas',
