@@ -20,11 +20,14 @@ import { Bouton, EnteteFenetre, PiedNote } from '../ui/ui'
 
 type Message = { ton: 'ok' | 'avert' | 'erreur'; texte: string; details?: string[] }
 
+const ID_CHAMP_FICHIER = 'corpus-champ-fichier'
+
 export function Donnees() {
   const etat = useEtat()
   const [message, setMessage] = useState<Message | null>(null)
   const [confirmationEffacement, setConfirmationEffacement] = useState(false)
   const [progression, setProgression] = useState<ProgressionSante | null>(null)
+  const [survolDepot, setSurvolDepot] = useState(false)
   const refFichier = useRef<HTMLInputElement>(null)
   const refAnnulation = useRef<AbortController | null>(null)
 
@@ -225,25 +228,58 @@ export function Donnees() {
             <code>export.xml</code> qu’il contient. La lecture se fait en flux, sans charger le
             fichier en mémoire ; sur plusieurs centaines de mégaoctets, compte quelques minutes.
           </p>
-          <input
-            ref={refFichier}
-            type="file"
-            accept=".csv,.txt,.json,.tsv,.xml,.zip"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void traiterFichier(f)
-              // Réinitialise pour permettre de réimporter le même fichier.
-              e.target.value = ''
-            }}
-          />
           {progression ? (
             <BarreProgression
               progression={progression}
               onAnnuler={() => refAnnulation.current?.abort()}
             />
           ) : (
-            <Bouton onClick={() => refFichier.current?.click()}>Choisir un fichier…</Bouton>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setSurvolDepot(true)
+              }}
+              onDragLeave={() => setSurvolDepot(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setSurvolDepot(false)
+                const f = e.dataTransfer.files?.[0]
+                if (f) void traiterFichier(f)
+                else setMessage({ ton: 'erreur', texte: 'Dépose un fichier, pas un dossier.' })
+              }}
+              className={`flex flex-wrap items-center gap-2 rounded border border-dashed px-2.5 py-2 transition-colors ${
+                survolDepot ? 'border-accent bg-accent/10' : 'border-bord'
+              }`}
+            >
+              {/*
+                Un <label for> et non un bouton qui appellerait `input.click()` :
+                Safari REFUSE le clic programmatique sur un champ de fichier
+                masqué, là où Chrome l'accepte — un test sous Chromium ne révèle
+                donc rien. Le label passe par le mécanisme natif d'activation du
+                navigateur, sans une ligne de JavaScript, et reste accessible au
+                clavier.
+              */}
+              <input
+                id={ID_CHAMP_FICHIER}
+                ref={refFichier}
+                type="file"
+                accept=".csv,.txt,.json,.tsv,.xml,.zip"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) void traiterFichier(f)
+                  // Réinitialise pour permettre de réimporter le même fichier.
+                  e.target.value = ''
+                }}
+              />
+              <label
+                htmlFor={ID_CHAMP_FICHIER}
+                className="cursor-pointer rounded border border-accent/60 px-2.5 py-1 text-[12px] text-accent transition-colors hover:bg-accent/10"
+              >
+                Choisir un fichier…
+              </label>
+              <span className="text-[11px] text-attenue">ou dépose-le ici</span>
+            </div>
           )}
         </Section>
 

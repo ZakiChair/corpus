@@ -9,7 +9,7 @@ Tout est local. Aucun compte, aucune synchronisation, aucun appel réseau.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5230
 npm test           # 197 tests
 npm run build
 ```
