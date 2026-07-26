@@ -8,6 +8,7 @@ import { diffJours, formaterJourLong } from '../core/temps'
 import { LIBELLES_ANNOTATION } from '../core/types'
 import { importerAthlos } from '../donnees/importAthlos'
 import { importerCsv } from '../donnees/importCsv'
+import { ImportAnnule, importerSante, type ProgressionSante } from '../donnees/importSante'
 import { Bouton, EnteteFenetre, PiedNote } from '../ui/ui'
 
 /**
@@ -23,7 +24,9 @@ export function Donnees() {
   const etat = useEtat()
   const [message, setMessage] = useState<Message | null>(null)
   const [confirmationEffacement, setConfirmationEffacement] = useState(false)
+  const [progression, setProgression] = useState<ProgressionSante | null>(null)
   const refFichier = useRef<HTMLInputElement>(null)
+  const refAnnulation = useRef<AbortController | null>(null)
 
   const ids = seriesRenseignees(etat)
   const bornes = bornesGlobales(etat)
@@ -31,8 +34,16 @@ export function Donnees() {
     'debut' in bornes ? diffJours(bornes.debut, bornes.fin) + 1 : 0
 
   async function traiterFichier(fichier: File) {
-    const texte = await fichier.text()
     const nom = fichier.name.toLowerCase()
+
+    if (nom.endsWith('.xml') || nom.endsWith('.zip')) {
+      await importerAppleSante(fichier)
+      return
+    }
+
+    // Les autres formats tiennent en mémoire sans difficulté ; seul l'export
+    // Apple justifie une lecture en flux.
+    const texte = await fichier.text()
 
     if (nom.endsWith('.json')) {
       let brut: unknown
@@ -99,6 +110,56 @@ export function Donnees() {
     })
   }
 
+  async function importerAppleSante(fichier: File) {
+    const controleur = new AbortController()
+    refAnnulation.current = controleur
+    setMessage(null)
+    setProgression({ octetsLus: 0, octetsTotal: fichier.size, enregistrementsLus: 0 })
+    try {
+      const r = await importerSante(fichier, fichier.name, {
+        onProgression: setProgression,
+        signal: controleur.signal,
+      })
+      const nbSeries = Object.keys(r.series).length
+      if (nbSeries === 0 && r.annotations.length === 0) {
+        setMessage({
+          ton: 'erreur',
+          texte: `Aucune donnée exploitable dans ce fichier (${r.enregistrementsLus.toLocaleString('fr-CH')} enregistrements lus).`,
+          details: r.typesIgnores.map((t) => `${t.type} : ${t.n.toLocaleString('fr-CH')} — non pris en charge`),
+        })
+        return
+      }
+      storeDonnees.getState().fusionner(r.series, r.annotations, r.profil)
+      setMessage({
+        ton: 'ok',
+        texte: `${r.enregistrementsLus.toLocaleString('fr-CH')} enregistrements lus, ${nbSeries} séries et ${r.annotations.length} séances importées.`,
+        details: [
+          ...Object.entries(r.series).map(
+            ([id, s]) => `${definitionOuGenerique(id).label} : ${s.length} jours`,
+          ),
+          ...r.avertissements,
+          ...(r.typesIgnores.length > 0
+            ? [
+                `Types non pris en charge, ignorés : ${r.typesIgnores
+                  .slice(0, 6)
+                  .map((t) => t.type)
+                  .join(', ')}.`,
+              ]
+            : []),
+        ],
+      })
+    } catch (e) {
+      const annule = e instanceof ImportAnnule
+      setMessage({
+        ton: annule ? 'avert' : 'erreur',
+        texte: annule ? 'Import annulé.' : `Lecture impossible : ${(e as Error).message}`,
+      })
+    } finally {
+      setProgression(null)
+      refAnnulation.current = null
+    }
+  }
+
   function exporter() {
     const blob = new Blob([JSON.stringify(etat, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -158,10 +219,16 @@ export function Donnees() {
             de date et la virgule décimale sont détectés. Ou le JSON exporté par ATHLOS, ou une
             sauvegarde CORPUS.
           </p>
+          <p className="mb-2 text-[11px] leading-relaxed text-attenue">
+            <strong className="text-texte">Apple Santé</strong> — l’<code>export.zip</code> tel
+            que l’application le produit (Profil → Exporter toutes les données), ou l’
+            <code>export.xml</code> qu’il contient. La lecture se fait en flux, sans charger le
+            fichier en mémoire ; sur plusieurs centaines de mégaoctets, compte quelques minutes.
+          </p>
           <input
             ref={refFichier}
             type="file"
-            accept=".csv,.txt,.json,.tsv"
+            accept=".csv,.txt,.json,.tsv,.xml,.zip"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
@@ -170,7 +237,14 @@ export function Donnees() {
               e.target.value = ''
             }}
           />
-          <Bouton onClick={() => refFichier.current?.click()}>Choisir un fichier…</Bouton>
+          {progression ? (
+            <BarreProgression
+              progression={progression}
+              onAnnuler={() => refAnnulation.current?.abort()}
+            />
+          ) : (
+            <Bouton onClick={() => refFichier.current?.click()}>Choisir un fichier…</Bouton>
+          )}
         </Section>
 
         <Section titre="Sauvegarder">
@@ -266,6 +340,40 @@ export function Donnees() {
       </div>
 
       <PiedNote>{AVERTISSEMENT}</PiedNote>
+    </div>
+  )
+}
+
+function BarreProgression({
+  progression,
+  onAnnuler,
+}: {
+  progression: ProgressionSante
+  onAnnuler: () => void
+}) {
+  const { octetsLus, octetsTotal, enregistrementsLus } = progression
+  const part = octetsTotal > 0 ? Math.min(1, octetsLus / octetsTotal) : 0
+  const mo = (o: number) => (o / 1024 / 1024).toFixed(1)
+  return (
+    <div className="rounded border border-bord px-2.5 py-2">
+      <div className="flex items-baseline justify-between gap-3 text-[11px]">
+        <span className="text-texte">Lecture en cours…</span>
+        <span className="tabular-nums text-attenue">
+          {mo(octetsLus)} / {mo(octetsTotal)} Mo ·{' '}
+          {enregistrementsLus.toLocaleString('fr-CH')} enregistrements
+        </span>
+      </div>
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-bord/60">
+        <div
+          className="h-full rounded-full bg-accent transition-[width] duration-200"
+          style={{ width: `${(part * 100).toFixed(1)}%` }}
+        />
+      </div>
+      <div className="mt-1.5">
+        <Bouton variante="danger" onClick={onAnnuler}>
+          Annuler
+        </Bouton>
+      </div>
     </div>
   )
 }

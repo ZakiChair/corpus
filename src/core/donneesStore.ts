@@ -9,6 +9,7 @@ import {
   retirerPoint,
   type Annotation,
   type EtatCorpus,
+  type Profil,
   type Serie,
   type TypeAnnotation,
 } from './types'
@@ -34,7 +35,11 @@ interface EtatStore {
   retirerMesure: (id: string, j: Jour) => void
   ajouterAnnotation: (a: Omit<Annotation, 'id'>) => void
   supprimerAnnotation: (id: string) => void
-  fusionner: (series: Record<string, Serie>, annotations?: Annotation[]) => void
+  fusionner: (
+    series: Record<string, Serie>,
+    annotations?: Annotation[],
+    profil?: Partial<Profil>,
+  ) => void
   genererDemonstration: (jours?: number) => void
   reinitialiser: () => void
 }
@@ -113,7 +118,7 @@ export const storeDonnees = createStore<EtatStore>((set, get) => ({
       annotations: etat.annotations.filter((a) => a.id !== id),
     })),
 
-  fusionner: (series, annotations = []) =>
+  fusionner: (series, annotations = [], profil) =>
     muter(set, get, (etat) => {
       const fusion: Record<string, Serie> = { ...etat.series }
       for (const [id, serie] of Object.entries(series)) {
@@ -129,6 +134,9 @@ export const storeDonnees = createStore<EtatStore>((set, get) => ({
         ...etat,
         series: fusion,
         annotations: [...etat.annotations, ...nouvelles].sort((x, y) => (x.j < y.j ? -1 : 1)),
+        // Le profil importé complète, il n'écrase pas : une valeur déjà saisie
+        // à la main est plus sûre qu'une valeur devinée dans un export.
+        profil: { ...profil, ...etat.profil },
       }
     }),
 

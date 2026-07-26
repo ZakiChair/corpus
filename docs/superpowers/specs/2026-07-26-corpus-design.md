@@ -173,10 +173,12 @@ de percentile dans Bilan et en bande hebdomadaire dans Séries), et le rapport t
   format de date détectés.
 - **Profil ATHLOS** — priorité 1 : le `Profile` JSON exporté par ATHLOS, dont les
   `Metric.history` se transposent directement en séries Corpus.
-- **Apple Santé** — priorité 3, explicitement limitée : un vrai `export.xml` pèse plusieurs
-  centaines de mégaoctets et ne peut pas être testé ici. Le parseur est écrit en lecture
-  par morceaux et validé contre un petit fixture écrit à la main. Documenté comme non
-  vérifié contre un export réel.
+- **Apple Santé** — LIVRÉ après la v0.1. Lecture en flux de l'`export.zip` ou de
+  l'`export.xml`, avec progression et annulation, et lecture ZIP par le catalogue central
+  pour éviter de matérialiser le fichier. Validé contre un fixture, contre des archives
+  ZIP construites à la main, contre un découpage à des frontières d'octets hostiles, et de
+  bout en bout dans le navigateur sur un export synthétique de 120 jours. Reste non vérifié
+  contre un export réel de plusieurs centaines de mégaoctets.
 
 ## 8. Critères de succès
 

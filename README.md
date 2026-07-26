@@ -10,7 +10,7 @@ Tout est local. Aucun compte, aucune synchronisation, aucun appel réseau.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 157 tests
+npm test           # 197 tests
 npm run build
 ```
 
@@ -99,13 +99,41 @@ mécaniquement l'anomalie qu'on cherche à détecter.
 
 | Format | État |
 |---|---|
-| CSV | Séparateur, format de date et virgule décimale détectés. Conventions suisses comprises (`26.07.2026`, `74,7`, `12'480`). 25 tests. |
+| **Apple Santé** | L'`export.zip` tel que l'app le produit (Profil → Exporter toutes les données), ou l'`export.xml` qu'il contient. Lecture en flux avec progression et annulation. |
+| CSV | Séparateur, format de date et virgule décimale détectés. Conventions suisses comprises (`26.07.2026`, `74,7`, `12'480`). |
 | Profil ATHLOS | Le JSON exporté par ATHLOS. Poids et tour de taille rejoignent le catalogue, les métriques de performance sont conservées telles quelles, les séances deviennent des annotations. |
 | Sauvegarde CORPUS | Le JSON exporté depuis `DONN`. |
 
 Les dates ambiguës sont lues **jour avant mois** (convention européenne) : `03/12/2026`
-est le 3 décembre. Apple Santé n'est pas encore pris en charge — un `export.xml` réel pèse
-plusieurs centaines de mégaoctets et demande un parseur en flux.
+est le 3 décembre.
+
+### Apple Santé — ce qui est vérifié, et ce qui ne l'est pas
+
+Le parseur est testé contre un fixture écrit à la main, contre la lecture d'une archive ZIP
+(stockée et deflate), contre un découpage du fichier à des frontières d'octets hostiles —
+au milieu d'un attribut, d'un nom de balise, entre le `/` et le `>` — et de bout en bout
+dans le navigateur sur un export synthétique de 120 jours et 5 107 enregistrements, livré
+en `.zip`.
+
+**Aucun export réel n'a encore été passé dans ce code.** Un vrai `export.xml` pèse plusieurs
+centaines de mégaoctets ; la lecture est écrite en flux pour cette raison, mais le premier
+import réel reste à faire.
+
+Ce que l'import récupère : VFC, fréquence au repos, poids, masse grasse, tour de taille,
+pas, les quatre métriques de sommeil, les séances, et le profil (naissance, sexe, taille).
+Les types non pris en charge — la fréquence cardiaque instantanée surtout, de loin la plus
+volumineuse — sont comptés puis ignorés, et la fenêtre le signale.
+
+Trois conventions à connaître :
+
+- **Agrégation par métrique.** Les pas sont **sommés** sur la journée, tout le reste est
+  **médiané**. Une médiane sur les pas donnerait un chiffre plausible et faux.
+- **Une nuit appartient au jour du réveil.** Les segments sont regroupés en sessions (moins
+  d'une heure d'écart), la durée est l'**union** des intervalles — sinon une montre et une
+  application tierce couvrant la même nuit la compteraient deux fois.
+- **La masse grasse est ambiguë** : Apple écrit `unit="%"` avec tantôt `15.2`, tantôt
+  `0.152`. La décision se prend sur **tout le fichier** — si son maximum est ≤ 1, il est en
+  fractions — et jamais enregistrement par enregistrement.
 
 ## Structure
 
@@ -113,7 +141,7 @@ plusieurs centaines de mégaoctets et demande un parseur en flux.
 src/
   core/        temps, métriques, types, séries, stockage, store
   analyse/     stats, alignement, corrélation, charge, événement, régime, lecture
-  donnees/     générateur causal, import CSV, import ATHLOS
+  donnees/     générateur causal, imports (Apple Santé, CSV, ATHLOS), lecture ZIP
   shell/       registre, gestionnaire de fenêtres, fenêtre flottante, palette, thème
   ui/          domaine d'axe, zoom, jetons canvas, composants partagés
   fenetres/    une par mnémonique
