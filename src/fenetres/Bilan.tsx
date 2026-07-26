@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react'
-import { ecartAMediane, lireEcart, lireRang, lireRegime, AVERTISSEMENT } from '../analyse/lecture'
+import {
+  ecartAMediane,
+  lireEcart,
+  lireEcartConditionnel,
+  lireRang,
+  lireRegime,
+  AVERTISSEMENT,
+} from '../analyse/lecture'
 import { bandeDuRegime, calculerRegime, contributionDominante } from '../analyse/regime'
+import { zConditionnel, type EcartConditionnel } from '../analyse/saisonnalite'
 import { derniersJours, rangPercentile, zScoreGlissant } from '../analyse/stats'
 import { useEtat } from '../core/hooks'
 import {
@@ -90,6 +98,9 @@ export function Bilan() {
           fenetreUtilisee: reference?.fenetre ?? jours,
           rang: rangPercentile(s.map((p) => p.v), dernier.v),
           ecart: ecartAMediane(s, jours),
+          // Le percentile conditionnel promis en couverture : le même point,
+          // jugé face aux mêmes jours de semaine.
+          conditionnel: zConditionnel(s),
           apercu: derniersJours(s, 90),
         }
       }).filter((t): t is NonNullable<typeof t> => t !== null),
@@ -191,11 +202,22 @@ interface PropsTuile {
   fenetreUtilisee: number
   rang: number
   ecart: number
+  conditionnel: EcartConditionnel | undefined
   apercu: Serie
   indexCouleur: number
 }
 
-function Tuile({ def, dernier, z, fenetreUtilisee, rang, ecart, apercu, indexCouleur }: PropsTuile) {
+function Tuile({
+  def,
+  dernier,
+  z,
+  fenetreUtilisee,
+  rang,
+  ecart,
+  conditionnel,
+  apercu,
+  indexCouleur,
+}: PropsTuile) {
   const jeton = nomJetonSerie(indexCouleur)
   // L'heure de coucher est stockée en heures décimales pouvant dépasser 24
   // pour rester monotone ; elle s'affiche en horloge.
@@ -244,6 +266,23 @@ function Tuile({ def, dernier, z, fenetreUtilisee, rang, ecart, apercu, indexCou
           </>
         )}
       </div>
+
+      {conditionnel && (
+        <div
+          className="text-[10px]"
+          style={{
+            // Elle ne se colore que quand elle CONTREDIT la lecture brute :
+            // c'est là qu'elle apporte quelque chose.
+            color:
+              z !== undefined && Math.abs(conditionnel.z) < 0.5 !== (Math.abs(z) < 0.5)
+                ? 'var(--c-alerte)'
+                : 'var(--c-attenue)',
+          }}
+          title={`Référence : ${conditionnel.n} mêmes jours de semaine`}
+        >
+          {lireEcartConditionnel(conditionnel.z, conditionnel.jourSemaine)}
+        </div>
+      )}
 
       <div className="mt-1.5">
         <Sparkline serie={apercu} jeton={jeton} />

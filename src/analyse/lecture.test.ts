@@ -10,6 +10,7 @@ import {
   lireRegime,
   lireTendance,
 } from './lecture'
+import * as lectureModule from './lecture'
 
 describe('lireEcart', () => {
   it('reste neutre près de zéro', () => {
@@ -23,6 +24,14 @@ describe('lireEcart', () => {
 
   it('avoue un historique insuffisant plutôt que d’inventer', () => {
     expect(lireEcart(Number.NaN)).toBe('pas assez d’historique')
+  })
+})
+
+describe('lireEcartConditionnel', () => {
+  it('nomme le jour de semaine au pluriel', () => {
+    const { lireEcartConditionnel } = lectureModule
+    expect(lireEcartConditionnel(0.2, 5)).toBe('dans ta normale des samedis')
+    expect(lireEcartConditionnel(-1.2, 0)).toBe('1,2 σ sous ta normale des lundis')
   })
 })
 

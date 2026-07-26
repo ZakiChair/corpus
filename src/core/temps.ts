@@ -63,6 +63,10 @@ export function jourDeSemaine(j: Jour): number {
 
 export const NOMS_JOURS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'] as const
 
+export const NOMS_JOURS_LONGS = [
+  'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
+] as const
+
 const NOMS_MOIS = [
   'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
   'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',

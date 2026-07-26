@@ -1,5 +1,5 @@
 import { definitionOuGenerique, formaterValeur } from '../core/metriques'
-import { formaterJourLong, jourVersIndex, type Jour } from '../core/temps'
+import { formaterJourLong, jourVersIndex, NOMS_JOURS_LONGS, type Jour } from '../core/temps'
 import type { Serie } from '../core/types'
 import { bandeDuRegime, type Contribution } from './regime'
 import { mediane, rangPercentile } from './stats'
@@ -32,6 +32,18 @@ export function lireEcart(z: number, fenetreJours = 30): string {
   if (Math.abs(z) < 0.35) return `dans ta normale ${fenetreJours} j`
   const cote = z > 0 ? 'au-dessus de' : 'sous'
   return `${formaterSigma(z)} ${cote} ta normale ${fenetreJours} j`
+}
+
+/**
+ * « 0,8 σ sous ta normale des samedis » — le z conditionné au jour de
+ * semaine, dans la même grammaire que `lireEcart`.
+ */
+export function lireEcartConditionnel(z: number, jourSemaine: number): string {
+  const jour = `${NOMS_JOURS_LONGS[jourSemaine] ?? '?'}s`
+  if (!Number.isFinite(z)) return 'pas assez d’historique'
+  if (Math.abs(z) < 0.5) return `dans ta normale des ${jour}`
+  const cote = z > 0 ? 'au-dessus de' : 'sous'
+  return `${formaterSigma(z)} ${cote} ta normale des ${jour}`
 }
 
 export function lireRang(rang: number): string {
