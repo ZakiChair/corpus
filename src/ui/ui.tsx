@@ -1,7 +1,8 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, type ReactNode } from 'react'
 import type { Serie } from '../core/types'
 import { avecMarge } from './domaineAxe'
 import { lireJeton, preparerCanvas } from './jetonsCanvas'
+import { useRedessinSurRedimensionnement, useRefCanvas } from './useDomaineZoom'
 import { useThemeCanvas } from './useThemeCanvas'
 
 /* —————————————————————————— Contrôles de base —————————————————————————— */
@@ -255,13 +256,12 @@ export function Sparkline({
   hauteur?: number
   remplir?: boolean
 }) {
-  const ref = useRef<HTMLCanvasElement>(null)
+  const { refCanvas, canvas } = useRefCanvas()
   // Le thème est une dépendance de dessin : sans lui, la courbe garde les
   // couleurs de l'ancien thème après un changement.
   const theme = useThemeCanvas()
 
-  useEffect(() => {
-    const canvas = ref.current
+  const dessiner = useCallback(() => {
     if (!canvas) return
     const prepare = preparerCanvas(canvas)
     if (!prepare) return
@@ -301,9 +301,15 @@ export function Sparkline({
     ctx.arc(largeur - 1.5, enY(dernier.v), 2, 0, Math.PI * 2)
     ctx.fillStyle = couleur
     ctx.fill()
-  }, [serie, jeton, remplir, theme])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `theme` force le redessin au changement de thème
+  }, [canvas, serie, jeton, remplir, theme])
 
-  return <canvas ref={ref} className="w-full" style={{ height: hauteur }} />
+  useEffect(() => dessiner(), [dessiner])
+  // Les tuiles vivent dans des grilles fluides : le buffer du canvas doit
+  // suivre la largeur réelle, sinon la courbe reste un bitmap étiré et flou.
+  useRedessinSurRedimensionnement(canvas, dessiner)
+
+  return <canvas ref={refCanvas} className="w-full" style={{ height: hauteur }} />
 }
 
 /** Barre horizontale centrée sur zéro, pour représenter un z-score. */
