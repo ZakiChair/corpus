@@ -368,3 +368,37 @@ test('les données saisies survivent au rechargement', async ({ page }) => {
     fenetre(page, 'Saisie').locator('label', { hasText: 'Énergie' }).locator('input'),
   ).toHaveAttribute('placeholder', '7')
 })
+
+test('les gestes du canvas s’activent quand les données arrivent après l’ouverture', async ({ page }) => {
+  await page.goto('/')
+  await viderCorpus(page)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Générer 18 mois' })).toBeVisible()
+  // SERI est montée VIDE : son canvas n'existe pas encore. C'est le parcours
+  // du premier lancement — la fenêtre invite à générer depuis DONN, puis les
+  // données arrivent SANS que la fenêtre soit démontée.
+  await ouvrir(page, 'SERI')
+  await expect(fenetre(page, 'Séries')).toContainText('Aucune série à tracer')
+  // SERI recouvre DONN : on l'ancre à droite pour dégager le bouton.
+  await page.keyboard.press('Alt+ArrowRight')
+  await fenetre(page, 'Données').getByRole('button', { name: 'Générer 18 mois' }).click()
+  const seri = fenetre(page, 'Séries')
+  const canvas = seri.locator('canvas')
+  await expect(canvas).toBeVisible()
+  // Le survol doit répondre : réticule + infobulle datée du jour pointé.
+  const boite = await canvas.boundingBox()
+  await page.mouse.move(boite!.x + boite!.width * 0.6, boite!.y + boite!.height * 0.4)
+  await page.mouse.move(boite!.x + boite!.width * 0.62, boite!.y + boite!.height * 0.4)
+  await expect(seri.locator('div.backdrop-blur-sm')).toBeVisible()
+})
+
+test('une fenêtre qui ne charge pas n’emporte pas le reste du terminal', async ({ page }) => {
+  await demarrerAvecDemo(page)
+  // Panne de chargement d'un module de fenêtre : coupure réseau, ou
+  // déploiement qui a renommé les fichiers pendant qu'un onglet restait ouvert.
+  await page.route('**/fenetres/Correlations*', (route) => route.abort())
+  await ouvrir(page, 'CORR')
+  await expect(fenetre(page, 'Corrélations')).toContainText('n’a pas pu charger')
+  // Les fenêtres déjà chargées restent vivantes.
+  await expect(page.locator('[aria-label="Bilan du jour"]')).toContainText('métriques suivies')
+})
