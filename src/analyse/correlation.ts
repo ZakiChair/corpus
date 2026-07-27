@@ -57,7 +57,32 @@ export type Methode = 'pearson' | 'spearman'
 export interface Correlation {
   r: number
   n: number
+  /**
+   * Nombre d'observations réellement indépendantes (≤ n). Les séries
+   * physiologiques quotidiennes sont fortement autocorrélées — le poids d'un
+   * jour ressemble à celui de la veille — et c'est CE nombre, pas le décompte
+   * de paires, qui doit nourrir un seuil de significativité.
+   */
+  nEffectif: number
   decalage: number
+}
+
+/** Autocorrélation lag-1 : Pearson entre v[t] et v[t+1]. */
+function autocorrelation1(xs: readonly number[]): number {
+  return pearson(xs.slice(0, -1), xs.slice(1))
+}
+
+/**
+ * Taille d'échantillon effective de deux vecteurs appariés, par la correction
+ * de Bartlett/Bretherton : n · (1 − r₁ᵃr₁ᵇ) / (1 + r₁ᵃr₁ᵇ). Deux tendances
+ * pures (r₁ ≈ 1 chacune) ne portent presque aucune information indépendante ;
+ * deux bruits blancs gardent leur n.
+ */
+export function nEffectif(x: readonly number[], y: readonly number[]): number {
+  const n = Math.min(x.length, y.length)
+  const phi = autocorrelation1(x) * autocorrelation1(y)
+  if (!Number.isFinite(phi) || phi <= 0) return n
+  return Math.min(n, Math.round((n * (1 - phi)) / (1 + phi)))
 }
 
 /**
@@ -71,7 +96,7 @@ export function correlationDecalee(
 ): Correlation {
   const { x, y } = aligner(a, b, decalage)
   const r = methode === 'pearson' ? pearson(x, y) : spearman(x, y)
-  return { r, n: x.length, decalage }
+  return { r, n: x.length, nEffectif: nEffectif(x, y), decalage }
 }
 
 /** Corrélation pour chaque décalage de −max à +max. */
@@ -145,6 +170,8 @@ export interface MatriceCorrelation {
   /** `valeurs[i][j]` : corrélation de ids[i] (avancé de `decalage`) avec ids[j]. */
   valeurs: (number | undefined)[][]
   effectifs: number[][]
+  /** Effectifs corrigés de l'autocorrélation — pour les seuils, pas l'affichage. */
+  nEffectifs: number[][]
   decalage: number
 }
 
@@ -157,29 +184,35 @@ export function matriceCorrelation(
   const listeIds = [...ids]
   const valeurs: (number | undefined)[][] = []
   const effectifs: number[][] = []
+  const nEffectifs: number[][] = []
   for (const idA of listeIds) {
     const ligne: (number | undefined)[] = []
     const ligneN: number[] = []
+    const ligneNEff: number[] = []
     for (const idB of listeIds) {
       const a = series[idA]
       const b = series[idB]
       if (!a || !b || a.length === 0 || b.length === 0) {
         ligne.push(undefined)
         ligneN.push(0)
+        ligneNEff.push(0)
         continue
       }
       // La diagonale à décalage nul vaut 1 par construction ; inutile de la calculer.
       if (idA === idB && decalage === 0) {
         ligne.push(1)
         ligneN.push(a.length)
+        ligneNEff.push(a.length)
         continue
       }
       const c = correlationDecalee(a, b, decalage, methode)
       ligne.push(Number.isFinite(c.r) ? c.r : undefined)
       ligneN.push(c.n)
+      ligneNEff.push(c.nEffectif)
     }
     valeurs.push(ligne)
     effectifs.push(ligneN)
+    nEffectifs.push(ligneNEff)
   }
-  return { ids: listeIds, valeurs, effectifs, decalage }
+  return { ids: listeIds, valeurs, effectifs, nEffectifs, decalage }
 }

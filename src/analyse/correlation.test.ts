@@ -3,6 +3,7 @@ import { decalerJour } from '../core/temps'
 import type { Serie } from '../core/types'
 import { creerAlea, gaussienne } from '../donnees/alea'
 import {
+  correlationDecalee,
   MARGE_PIC,
   meilleurDecalage,
   pearson,
@@ -127,5 +128,28 @@ describe('seuilSignificativite', () => {
 
   it('rejette tout sur un effectif dérisoire', () => {
     expect(seuilSignificativite(3)).toBe(1)
+  })
+})
+
+describe('n effectif et autocorrélation', () => {
+  it('réduit le n effectif de deux séries en tendance pure', () => {
+    // Deux tendances linéaires : chaque jour est presque identique au
+    // précédent (autocorrélation lag-1 ≈ 1). Les ~100 paires ne portent
+    // qu'une poignée d'observations indépendantes — le seuil de
+    // significativité calculé sur le n brut ne griserait presque rien.
+    const a = serieDepuis('2026-01-01', Array.from({ length: 100 }, (_, i) => 70 + i * 0.1))
+    const b = serieDepuis('2026-01-01', Array.from({ length: 100 }, (_, i) => 20 + i * 0.05))
+    const c = correlationDecalee(a, b, 0, 'pearson')
+    expect(c.n).toBe(100)
+    expect(c.nEffectif).toBeLessThan(c.n / 4)
+  })
+
+  it('conserve le n des séries sans mémoire', () => {
+    // Rotation irrationnelle : quasi pas d'autocorrélation lag-1.
+    const a = serieDepuis('2026-01-01', Array.from({ length: 100 }, (_, i) => ((i * 0.754877) % 1) * 10))
+    const b = serieDepuis('2026-01-01', Array.from({ length: 100 }, (_, i) => ((i * 0.380421) % 1) * 10))
+    const c = correlationDecalee(a, b, 0, 'pearson')
+    expect(c.nEffectif).toBeGreaterThan(c.n * 0.6)
+    expect(c.nEffectif).toBeLessThanOrEqual(c.n)
   })
 })

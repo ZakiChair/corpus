@@ -80,7 +80,10 @@ export function Correlations() {
         // il n'y a pas de sens du tout, l'ordre alphabétique tranche.
         if (c.decalage < 0) continue
         if (c.decalage === 0 && idA >= idB) continue
-        if (Math.abs(c.r) < seuilSignificativite(c.n) * 2.2) continue
+        // Le seuil se calcule sur le n EFFECTIF : sur des séries lentes
+        // (poids, masse grasse), le n brut laisserait passer des corrélations
+        // de tendance commune comme des découvertes.
+        if (Math.abs(c.r) < seuilSignificativite(c.nEffectif) * 2.2) continue
         paires.push({ a: idA, b: idB, r: c.r, decalage: c.decalage, n: c.n })
       }
     }
@@ -131,7 +134,8 @@ export function Correlations() {
             ctx.fillRect(x, y, cote - 1, cote - 1)
             continue
           }
-          const significatif = Math.abs(r) >= seuilSignificativite(nb)
+          const significatif =
+            Math.abs(r) >= seuilSignificativite(matrice.nEffectifs[i]?.[j] ?? 0)
           const rgb = r >= 0 ? positif : negatif
           const intensite = Math.min(1, Math.abs(r)) * (significatif ? 1 : 0.22)
           ctx.fillStyle = rgb
