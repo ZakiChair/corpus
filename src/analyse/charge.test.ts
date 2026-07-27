@@ -145,3 +145,16 @@ describe('sur l’historique généré', () => {
     expect(valeurAuJour(dense, unJourDeSeance)).toBeGreaterThan(0)
   })
 })
+
+describe('amorçage du ratio', () => {
+  it('n’émet aucun ratio avant une fenêtre chronique complète', () => {
+    // Au premier jour, les fenêtres 7 j et 28 j contiennent le même point
+    // unique : ratio = 1,0 exactement, « dans ton habitude » — alors
+    // qu'aucune habitude n'existe encore. Le ratio ne doit apparaître
+    // qu'une fois les 28 jours d'habitude constitués.
+    const dense = serieDepuis('2026-01-01', Array.from({ length: 30 }, () => 400))
+    const c = calculerCharge(dense)
+    expect(c.ratio.length).toBe(3)
+    expect(c.ratio[0]!.j).toBe('2026-01-28')
+  })
+})

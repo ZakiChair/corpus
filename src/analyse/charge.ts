@@ -64,7 +64,12 @@ export function calculerCharge(serieDense: Serie): Charge {
     .filter((p): p is { j: Jour; v: number } => p !== undefined)
 
   const moyAigue = moyenneGlissante(serieDense, FENETRE_RATIO_AIGUE)
-  const moyChronique = moyenneGlissante(serieDense, FENETRE_RATIO_CHRONIQUE)
+  // La fenêtre chronique doit être COMPLÈTE : au premier jour, aiguë et
+  // chronique contiendraient le même point unique et le ratio vaudrait 1,0
+  // exactement — « dans ton habitude » sans aucune habitude constituée.
+  const moyChronique = fenetreGlissante(serieDense, FENETRE_RATIO_CHRONIQUE, moyenne, {
+    minimum: FENETRE_RATIO_CHRONIQUE,
+  })
   const chroParJour = new Map<Jour, number>(moyChronique.map((p) => [p.j, p.v]))
   const ratio: Serie = []
   for (const p of moyAigue) {
