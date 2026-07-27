@@ -57,7 +57,6 @@ export function Correlations() {
     const out: Record<string, Serie> = {}
     for (const id of ids) out[id] = serieAnalyse(etat, id)
     return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids, ...ids.map((id) => etat.series[id])])
 
   const matrice = useMemo(
@@ -186,7 +185,8 @@ export function Correlations() {
         ctx.restore()
       }
     },
-    [ids, matrice, theme],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `theme` force le redessin au changement de thème
+    [ids, matrice, refCanvas, theme],
   )
 
   useEffect(() => {
@@ -209,7 +209,7 @@ export function Correlations() {
     const i = Math.floor((pointeur.y - MARGE.haut) / cote)
     if (i < 0 || j < 0 || i >= ids.length || j >= ids.length) return null
     return { i, j, r: matrice.valeurs[i]?.[j], n: matrice.effectifs[i]?.[j] ?? 0 }
-  }, [pointeur, ids, matrice])
+  }, [pointeur, ids, matrice, refCanvas])
 
   if (ids.length < 2) {
     return (

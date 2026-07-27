@@ -193,7 +193,8 @@ export function Evenements() {
         ctx.fillText(d === 0 ? 'J' : `${d > 0 ? '+' : ''}${d}`, enX(k), MARGE.haut + h + 8)
       }
     },
-    [reponse, theme],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `theme` force le redessin au changement de thème
+    [reponse, refCanvas, theme],
   )
 
   useEffect(() => {

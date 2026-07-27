@@ -195,6 +195,7 @@ export function Charge() {
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `theme` force le redessin au changement de thème
     [domaine, charge, refCanvas, theme],
   )
 
