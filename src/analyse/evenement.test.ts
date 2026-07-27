@@ -80,3 +80,20 @@ describe('ligne de base et occurrences rapprochées', () => {
     expect(r.moyenne[k]).toBeCloseTo(5, 6)
   })
 })
+
+describe('occurrences multiples le même jour', () => {
+  it('dédoublonne : deux annotations le même jour comptent pour une occurrence', () => {
+    // Deux annotations « séance » le même jour (matin + soir) ne sont qu'une
+    // occurrence pour l'étude : les compter deux fois gonfle nEvenements et
+    // resserre artificiellement l'intervalle (pseudo-réplication).
+    const s = serie({ 10: 10, 11: 6 })
+    const uneFois = etudeEvenement(s, [jour(10)], { avant: 3, apres: 2, minimumBase: 1 })
+    const deuxFois = etudeEvenement(s, [jour(10), jour(10)], {
+      avant: 3,
+      apres: 2,
+      minimumBase: 1,
+    })
+    expect(deuxFois).toEqual(uneFois)
+    expect(deuxFois.nEvenements).toBe(1)
+  })
+})

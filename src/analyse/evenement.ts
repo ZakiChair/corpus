@@ -59,12 +59,18 @@ export function etudeEvenement(
   const decalages: number[] = []
   for (let d = -avant; d <= apres; d++) decalages.push(d)
 
+  // Deux annotations du même type le même jour (séance matin + soir) ne font
+  // qu'une occurrence : les compter deux fois pousserait deux fois les mêmes
+  // écarts dans chaque seau et resserrerait l'intervalle sans information
+  // nouvelle (pseudo-réplication).
+  const occurrences = [...new Set(joursEvenement)]
+
   // Jours encore sous l'influence d'une occurrence : le jour même et les
   // `exclusionApresAutre` jours qui suivent. Comme la ligne de base d'un
   // événement est strictement antérieure à lui, il ne se met jamais lui-même
   // en quarantaine.
   const quarantaine = new Set<number>()
-  for (const e of joursEvenement) {
+  for (const e of occurrences) {
     const i0 = jourVersIndex(e)
     for (let d = 0; d <= exclusionApresAutre; d++) quarantaine.add(i0 + d)
   }
@@ -74,7 +80,7 @@ export function etudeEvenement(
   let nEcartes = 0
   let nContamines = 0
 
-  for (const e of joursEvenement) {
+  for (const e of occurrences) {
     // Ligne de base : les jours qui PRÉCÈDENT strictement l'événement.
     const base: number[] = []
     const baseAvecContamines: number[] = []
