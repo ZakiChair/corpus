@@ -70,8 +70,8 @@ export function Saisie() {
     setEnregistre(false)
   }
 
-  function enregistrer() {
-    const { poserMesure } = storeDonnees.getState()
+  async function enregistrer() {
+    const { poserMesure, purgerEcritureEnAttente } = storeDonnees.getState()
     let n = 0
     for (const [id, texte] of Object.entries(brouillon)) {
       const t = texte.trim()
@@ -81,10 +81,14 @@ export function Saisie() {
       poserMesure(id, jour, v)
       n++
     }
-    if (n > 0) {
-      setBrouillon({})
-      setEnregistre(true)
-    }
+    if (n === 0) return
+    // « Enregistré. » doit refléter la persistance réelle, pas l'état en
+    // mémoire : l'écriture est différée de 400 ms, et un rechargement dans
+    // cette fenêtre perdrait la saisie pourtant confirmée.
+    await purgerEcritureEnAttente()
+    if (storeDonnees.getState().persistance.statut !== 'pret') return
+    setBrouillon({})
+    setEnregistre(true)
   }
 
   const nbRemplis = Object.values(brouillon).filter((v) => v.trim() !== '').length
