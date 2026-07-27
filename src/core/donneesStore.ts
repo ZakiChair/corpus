@@ -244,11 +244,15 @@ export function creerStoreDonnees(
         muter((etat) => {
           const fusion: Record<string, Serie> = { ...etat.series }
           for (const [id, serie] of Object.entries(series)) {
-            let cible = fusion[id] ?? []
-            // Point à point : l'import écrase le jour existant plutôt que de le
-            // dupliquer, ce qui rend un même fichier réimportable sans dégât.
-            for (const p of serie) cible = poserPoint(cible, p.j, p.v)
-            fusion[id] = cible
+            // Par Map : l'import écrase le jour existant plutôt que de le
+            // dupliquer (même fichier réimportable sans dégât), avec un seul
+            // tri final — point à point via poserPoint, la fusion d'un export
+            // pluriannuel devenait quadratique et gelait le fil principal.
+            const parJour = new Map((fusion[id] ?? []).map((p) => [p.j, p.v]))
+            for (const p of serie) parJour.set(p.j, p.v)
+            fusion[id] = [...parJour]
+              .map(([j, v]) => ({ j, v }))
+              .sort((a, b) => (a.j < b.j ? -1 : a.j > b.j ? 1 : 0))
           }
           const connues = new Set(etat.annotations.map((a) => `${a.j}|${a.type}`))
           const nouvelles = annotations.filter((a) => !connues.has(`${a.j}|${a.type}`))

@@ -19,9 +19,21 @@ export interface Appariement {
  * trou par une valeur inventée gonflerait artificiellement la corrélation.
  */
 export function aligner(a: Serie, b: Serie, decalage = 0): Appariement {
+  return alignerAvecIndex(a, indexerParJour(b), decalage)
+}
+
+/** Index jour → valeur de `b`, à construire UNE fois pour plusieurs décalages. */
+export function indexerParJour(b: Serie): Map<Jour, number> {
   const indexB = new Map<Jour, number>()
   for (const p of b) indexB.set(p.j, p.v)
+  return indexB
+}
 
+export function alignerAvecIndex(
+  a: Serie,
+  indexB: ReadonlyMap<Jour, number>,
+  decalage = 0,
+): Appariement {
   const x: number[] = []
   const y: number[] = []
   const jours: Jour[] = []

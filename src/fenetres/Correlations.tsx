@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
   matriceCorrelation,
   meilleurDecalage,
@@ -59,9 +59,13 @@ export function Correlations() {
     return out
   }, [ids, ...ids.map((id) => etat.series[id])])
 
+  // Le slider émet en continu pendant le glissement ; la matrice (des
+  // centaines de Spearman sur ~1800 points) suit en valeur différée pour ne
+  // pas bloquer le pouce.
+  const decalageDiffere = useDeferredValue(decalage)
   const matrice = useMemo(
-    () => matriceCorrelation(series, ids, decalage, methode),
-    [series, ids, decalage, methode],
+    () => matriceCorrelation(series, ids, decalageDiffere, methode),
+    [series, ids, decalageDiffere, methode],
   )
 
   const meilleurs = useMemo(() => {

@@ -122,8 +122,23 @@ function Shell({ bloque }: { bloque: boolean }) {
         redimensionner(f.id, { x: f.x, y: f.y, largeur: f.largeur, hauteur: f.hauteur })
       }
     }
-    window.addEventListener('resize', recadrer)
-    return () => window.removeEventListener('resize', recadrer)
+    // `resize` tire des dizaines de fois par seconde pendant le glissement,
+    // et chaque recadrage écrit la disposition en localStorage : une passe
+    // par frame suffit.
+    let demande = 0
+    const surResize = () => {
+      if (demande === 0) {
+        demande = requestAnimationFrame(() => {
+          demande = 0
+          recadrer()
+        })
+      }
+    }
+    window.addEventListener('resize', surResize)
+    return () => {
+      cancelAnimationFrame(demande)
+      window.removeEventListener('resize', surResize)
+    }
   }, [bloque])
 
   return (

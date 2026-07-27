@@ -1,5 +1,5 @@
 import type { Serie } from '../core/types'
-import { aligner } from './alignement'
+import { aligner, alignerAvecIndex, indexerParJour } from './alignement'
 import { moyenne } from './stats'
 
 /** Coefficient de Pearson. NaN si l'un des deux vecteurs est constant. */
@@ -28,14 +28,16 @@ export function pearson(xs: readonly number[], ys: readonly number[]): number {
  * par exemple — verrait sa corrélation de rang dépendre de l'ordre de tri.
  */
 export function rangs(xs: readonly number[]): number[] {
-  const indices = xs.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v)
+  // Tri d'indices plutôt que d'objets {v, i} : la matrice appelle rangs des
+  // centaines de fois par recalcul, l'allocation d'un objet par point pesait.
+  const indices = xs.map((_, i) => i).sort((a, b) => xs[a]! - xs[b]!)
   const out = new Array<number>(xs.length).fill(0)
   let k = 0
   while (k < indices.length) {
     let fin = k
-    while (fin + 1 < indices.length && indices[fin + 1]!.v === indices[k]!.v) fin++
+    while (fin + 1 < indices.length && xs[indices[fin + 1]!] === xs[indices[k]!]) fin++
     const rangMoyen = (k + fin) / 2 + 1
-    for (let m = k; m <= fin; m++) out[indices[m]!.i] = rangMoyen
+    for (let m = k; m <= fin; m++) out[indices[m]!] = rangMoyen
     k = fin + 1
   }
   return out
@@ -106,9 +108,14 @@ export function profilDecalage(
   decalageMax = 7,
   methode: Methode = 'spearman',
 ): Correlation[] {
+  // L'index de `b` ne dépend pas du décalage : le construire une fois évite
+  // de refaire ~15 fois la même Map de 1800 entrées par paire de métriques.
+  const indexB = indexerParJour(b)
   const out: Correlation[] = []
   for (let d = -decalageMax; d <= decalageMax; d++) {
-    out.push(correlationDecalee(a, b, d, methode))
+    const { x, y } = alignerAvecIndex(a, indexB, d)
+    const r = methode === 'pearson' ? pearson(x, y) : spearman(x, y)
+    out.push({ r, n: x.length, nEffectif: nEffectif(x, y), decalage: d })
   }
   return out
 }
