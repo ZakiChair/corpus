@@ -69,8 +69,8 @@ export function Charge() {
     }
   }, [dense])
 
-  const { refCanvas, domaine, definirDomaine } = useDomaineZoom(bornes, () => setPreset(null))
-  const pointeur = usePointeurCanvas(refCanvas)
+  const { refCanvas, canvas, domaine, definirDomaine } = useDomaineZoom(bornes, () => setPreset(null))
+  const pointeur = usePointeurCanvas(canvas)
 
   // Le préréglage affiché doit correspondre à ce qui est tracé, sinon la
   // barre annonce une période que le graphe ne montre pas.
@@ -201,7 +201,7 @@ export function Charge() {
   useEffect(() => {
     dessiner()
   }, [dessiner])
-  useRedessinSurRedimensionnement(refCanvas, dessiner)
+  useRedessinSurRedimensionnement(canvas, dessiner)
 
   const jourSurvole = useMemo(() => {
     if (!pointeur || !domaine) return null

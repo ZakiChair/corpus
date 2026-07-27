@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { etudeEvenement, picReponse, type ReponseEvenement } from '../analyse/evenement'
 import { AVERTISSEMENT } from '../analyse/lecture'
 import { useEtat } from '../core/hooks'
@@ -7,7 +7,7 @@ import { joursDuType, serie as lireSerie, seriesRenseignees, typesPresents } fro
 import { LIBELLES_ANNOTATION, type TypeAnnotation } from '../core/types'
 import { avecMarge, graduations } from '../ui/domaineAxe'
 import { hexVersRgb, lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
-import { useRedessinSurRedimensionnement } from '../ui/useDomaineZoom'
+import { useRedessinSurRedimensionnement, useRefCanvas } from '../ui/useDomaineZoom'
 import { useThemeCanvas } from '../ui/useThemeCanvas'
 import { EnteteFenetre, PiedNote, Selecteur, Vide } from '../ui/ui'
 
@@ -29,7 +29,7 @@ const MARGE = { gauche: 52, droite: 12, haut: 14, bas: 30 }
 export function Evenements() {
   const etat = useEtat()
   const theme = useThemeCanvas()
-  const refCanvas = useRef<HTMLCanvasElement>(null)
+  const { refCanvas, canvas } = useRefCanvas()
 
   const types = useMemo(() => typesPresents(etat), [etat])
   const metriques = useMemo(
@@ -199,7 +199,7 @@ export function Evenements() {
   useEffect(() => {
     dessiner()
   }, [dessiner])
-  useRedessinSurRedimensionnement(refCanvas, dessiner)
+  useRedessinSurRedimensionnement(canvas, dessiner)
 
   if (types.length === 0 || metriques.length === 0) {
     return (

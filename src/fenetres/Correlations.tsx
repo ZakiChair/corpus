@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   matriceCorrelation,
   meilleurDecalage,
@@ -12,7 +12,7 @@ import { serieAnalyse, seriesRenseignees } from '../core/series'
 import type { Serie } from '../core/types'
 import { storeIntentions } from '../shell/intentions'
 import { hexVersRgb, lireJeton, preparerCanvas } from '../ui/jetonsCanvas'
-import { usePointeurCanvas, useRedessinSurRedimensionnement } from '../ui/useDomaineZoom'
+import { usePointeurCanvas, useRedessinSurRedimensionnement, useRefCanvas } from '../ui/useDomaineZoom'
 import { useThemeCanvas } from '../ui/useThemeCanvas'
 import { EnteteFenetre, PiedNote, Segments, Vide } from '../ui/ui'
 
@@ -41,8 +41,8 @@ export function Correlations() {
   const theme = useThemeCanvas()
   const [decalage, setDecalage] = useState(0)
   const [methode, setMethode] = useState<Methode>('spearman')
-  const refCanvas = useRef<HTMLCanvasElement>(null)
-  const pointeur = usePointeurCanvas(refCanvas)
+  const { refCanvas, canvas } = useRefCanvas()
+  const pointeur = usePointeurCanvas(canvas)
 
   const idsCalcules = useMemo(
     // Une corrélation sur une douzaine de points n'apprend rien et encombre.
@@ -192,7 +192,7 @@ export function Correlations() {
   useEffect(() => {
     dessiner()
   }, [dessiner])
-  useRedessinSurRedimensionnement(refCanvas, dessiner)
+  useRedessinSurRedimensionnement(canvas, dessiner)
 
   const survol = useMemo(() => {
     const canvas = refCanvas.current

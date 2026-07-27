@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   clamperDomaine,
   deplacerDomaine,
@@ -7,6 +7,33 @@ import {
   zoomerDomaine,
   type Domaine,
 } from './domaineAxe'
+
+/** Ref de canvas utilisable en JSX (fonction) ET lisible via `.current`. */
+export type RefCanvas = ((element: HTMLCanvasElement | null) => void) & {
+  current: HTMLCanvasElement | null
+}
+
+/**
+ * Ref de canvas qui SIGNALE son montage via `canvas`.
+ *
+ * Une fenêtre ouverte sans données ne monte son canvas qu'au premier rendu
+ * avec données : un effet qui ne dépend que de l'objet ref (identité stable,
+ * `.current` encore nul à son exécution) ne se rejouerait jamais, et gestes
+ * comme réticule resteraient morts pour toute la vie de la fenêtre. Les
+ * effets doivent dépendre de `canvas`, qui change quand l'élément apparaît.
+ */
+export function useRefCanvas(): { refCanvas: RefCanvas; canvas: HTMLCanvasElement | null } {
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null)
+  const refCanvas = useMemo<RefCanvas>(() => {
+    const poser = (element: HTMLCanvasElement | null) => {
+      ref.current = element
+      setCanvas(element)
+    }
+    const ref = Object.assign(poser, { current: null as HTMLCanvasElement | null })
+    return ref
+  }, [])
+  return { refCanvas, canvas }
+}
 
 /**
  * Branche les gestes de zoom et de panoramique d'un canvas sur un domaine.
@@ -22,12 +49,13 @@ export function useDomaineZoom(
   bornes: Domaine | null,
   onGeste?: () => void,
 ): {
-  refCanvas: React.RefObject<HTMLCanvasElement | null>
+  refCanvas: RefCanvas
+  canvas: HTMLCanvasElement | null
   domaine: Domaine | null
   definirDomaine: (d: Domaine) => void
   reinitialiser: () => void
 } {
-  const refCanvas = useRef<HTMLCanvasElement>(null)
+  const { refCanvas, canvas } = useRefCanvas()
   const [domaine, setDomaine] = useState<Domaine | null>(bornes)
 
   // Miroirs en ref : les écouteurs natifs sont attachés une seule fois et
@@ -50,7 +78,6 @@ export function useDomaineZoom(
   }, [bornes?.min, bornes?.max]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const canvas = refCanvas.current
     if (!canvas) return
 
     const molette = (e: WheelEvent) => {
@@ -106,7 +133,7 @@ export function useDomaineZoom(
       canvas.removeEventListener('pointerdown', enfoncer)
       canvas.removeEventListener('dblclick', doubleClic)
     }
-  }, [])
+  }, [canvas])
 
   const definirDomaine = useCallback((d: Domaine) => {
     const b = refBornes.current
@@ -118,7 +145,7 @@ export function useDomaineZoom(
     if (b) setDomaine({ ...b })
   }, [])
 
-  return { refCanvas, domaine, definirDomaine, reinitialiser }
+  return { refCanvas, canvas, domaine, definirDomaine, reinitialiser }
 }
 
 /**
@@ -126,12 +153,11 @@ export function useDomaineZoom(
  * Sert aux infobulles et au réticule.
  */
 export function usePointeurCanvas(
-  refCanvas: React.RefObject<HTMLCanvasElement | null>,
+  canvas: HTMLCanvasElement | null,
 ): { x: number; y: number } | null {
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
-    const canvas = refCanvas.current
     if (!canvas) return
     const bouger = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect()
@@ -144,24 +170,23 @@ export function usePointeurCanvas(
       canvas.removeEventListener('pointermove', bouger)
       canvas.removeEventListener('pointerleave', sortir)
     }
-  }, [refCanvas])
+  }, [canvas])
 
   return position
 }
 
 /** Redessine à chaque changement de taille du conteneur. */
 export function useRedessinSurRedimensionnement(
-  refCanvas: React.RefObject<HTMLCanvasElement | null>,
+  canvas: HTMLCanvasElement | null,
   redessiner: () => void,
 ): void {
   const refRedessiner = useRef(redessiner)
   refRedessiner.current = redessiner
 
   useEffect(() => {
-    const canvas = refCanvas.current
     if (!canvas) return
     const observateur = new ResizeObserver(() => refRedessiner.current())
     observateur.observe(canvas)
     return () => observateur.disconnect()
-  }, [refCanvas])
+  }, [canvas])
 }

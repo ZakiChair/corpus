@@ -103,8 +103,8 @@ export function Series() {
     return Number.isFinite(min) ? { min, max } : null
   }, [series])
 
-  const { refCanvas, domaine, definirDomaine } = useDomaineZoom(bornes, () => setPreset(null))
-  const pointeur = usePointeurCanvas(refCanvas)
+  const { refCanvas, canvas, domaine, definirDomaine } = useDomaineZoom(bornes, () => setPreset(null))
+  const pointeur = usePointeurCanvas(canvas)
 
   // Le préréglage affiché doit correspondre à ce qui est tracé. Sans cela, la
   // barre annonce « 90 j » en surbrillance pendant que le graphe montre tout
@@ -281,7 +281,7 @@ export function Series() {
   useEffect(() => {
     dessiner()
   }, [dessiner])
-  useRedessinSurRedimensionnement(refCanvas, dessiner)
+  useRedessinSurRedimensionnement(canvas, dessiner)
 
   // Jour survolé, pour l'infobulle.
   const jourSurvole = useMemo(() => {
