@@ -91,16 +91,53 @@ export async function listerEntrees(blob: Blob): Promise<EntreeZip[]> {
     if (p + TAILLE_ENTREE_CATALOGUE > vue.byteLength) break
     if (vue.getUint32(p, true) !== SIG_ENTREE_CATALOGUE) break
     const methode = vue.getUint16(p + 10, true)
-    const tailleCompressee = vue.getUint32(p + 20, true)
-    const tailleDecompressee = vue.getUint32(p + 24, true)
+    let tailleCompressee = vue.getUint32(p + 20, true)
+    let tailleDecompressee = vue.getUint32(p + 24, true)
     const longueurNom = vue.getUint16(p + 28, true)
     const longueurExtra = vue.getUint16(p + 30, true)
     const longueurCommentaire = vue.getUint16(p + 32, true)
-    const offsetEnteteLocal = vue.getUint32(p + 42, true)
+    let offsetEnteteLocal = vue.getUint32(p + 42, true)
     const nom = decodeur.decode(
       new Uint8Array(vue.buffer, vue.byteOffset + p + TAILLE_ENTREE_CATALOGUE, longueurNom),
     )
-    if (tailleCompressee !== SENTINELLE_ZIP64 && offsetEnteteLocal !== SENTINELLE_ZIP64) {
+
+    // Champ extra ZIP64 (id 0x0001) : dès qu'une valeur 32 bits déborde, le
+    // catalogue porte la sentinelle et la vraie valeur 64 bits vit ici — dans
+    // l'ordre (décompressée, compressée, offset), et UNIQUEMENT pour les
+    // champs effectivement à la sentinelle. Un export.xml de plusieurs Gio
+    // décompressés est le cas réel : sans cette lecture, la barre de
+    // progression sauterait à 100 % puis se figerait.
+    let q = p + TAILLE_ENTREE_CATALOGUE + longueurNom
+    const finExtra = q + longueurExtra
+    while (q + 4 <= finExtra && q + 4 <= vue.byteLength) {
+      const id = vue.getUint16(q, true)
+      const taille = vue.getUint16(q + 2, true)
+      if (id === 0x0001) {
+        let r = q + 4
+        const fin = Math.min(q + 4 + taille, finExtra)
+        if (tailleDecompressee === SENTINELLE_ZIP64 && r + 8 <= fin) {
+          tailleDecompressee = Number(vue.getBigUint64(r, true))
+          r += 8
+        }
+        if (tailleCompressee === SENTINELLE_ZIP64 && r + 8 <= fin) {
+          tailleCompressee = Number(vue.getBigUint64(r, true))
+          r += 8
+        }
+        if (offsetEnteteLocal === SENTINELLE_ZIP64 && r + 8 <= fin) {
+          offsetEnteteLocal = Number(vue.getBigUint64(r, true))
+        }
+        break
+      }
+      q += 4 + taille
+    }
+
+    // Une sentinelle encore présente après lecture du champ extra signale un
+    // catalogue malformé : l'entrée est inutilisable, on l'écarte.
+    if (
+      tailleCompressee !== SENTINELLE_ZIP64 &&
+      offsetEnteteLocal !== SENTINELLE_ZIP64 &&
+      tailleDecompressee !== SENTINELLE_ZIP64
+    ) {
       entrees.push({ nom, methode, offsetEnteteLocal, tailleCompressee, tailleDecompressee })
     }
     p += TAILLE_ENTREE_CATALOGUE + longueurNom + longueurExtra + longueurCommentaire
