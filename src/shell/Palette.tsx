@@ -145,8 +145,28 @@ export function Palette() {
     <div
       className="absolute inset-0 z-[400] flex items-start justify-center bg-black/50 pt-[14vh] backdrop-blur-sm"
       onClick={() => storeFenetres.getState().definirPalette(false)}
+      onKeyDown={(e) => {
+        // Piège à focus : sans lui, Tab quitte l'overlay vers les fenêtres
+        // visibles derrière — un clavier ou un lecteur d'écran se perd hors
+        // du dialogue qui semble pourtant seul actif.
+        if (e.key !== 'Tab') return
+        const focusables = e.currentTarget.querySelectorAll<HTMLElement>('input, button')
+        if (focusables.length === 0) return
+        const premier = focusables[0]!
+        const dernier = focusables[focusables.length - 1]!
+        if (e.shiftKey && document.activeElement === premier) {
+          e.preventDefault()
+          dernier.focus()
+        } else if (!e.shiftKey && document.activeElement === dernier) {
+          e.preventDefault()
+          premier.focus()
+        }
+      }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Palette de commandes"
         className="w-[min(560px,92vw)] overflow-hidden rounded-lg border border-bord bg-elevee shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

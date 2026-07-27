@@ -242,7 +242,12 @@ function Tuile({
       title={`${def.label} — ouvrir dans SERI`}
       onClick={() => storeIntentions.getState().demanderSeries({ ids: [def.id] })}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') storeIntentions.getState().demanderSeries({ ids: [def.id] })
+        // Un rôle « button » répond à Entrée ET Espace ; sans preventDefault,
+        // Espace ferait défiler la fenêtre au lieu d'ouvrir SERI.
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          storeIntentions.getState().demanderSeries({ ids: [def.id] })
+        }
       }}
     >
       <div className="flex items-baseline justify-between gap-2">
