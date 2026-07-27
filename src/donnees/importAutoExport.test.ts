@@ -143,3 +143,27 @@ describe('importerAutoExport', () => {
     expect(r2.avertissements.join(' ')).toContain('fraction')
   })
 })
+
+describe('agrégation horaire', () => {
+  it('garde le minimum du jour pour la FC nocturne, pas la médiane des minima horaires', () => {
+    // Réglage « Hourly » de Health Auto Export : ~24 points par jour, chacun
+    // portant le minimum de SA propre heure. La médiane de ces minima serait
+    // dominée par les heures d'éveil et surestimerait le nadir nocturne.
+    const r = importerAutoExport({
+      data: {
+        metrics: [
+          {
+            name: 'heart_rate',
+            units: 'count/min',
+            data: [
+              { date: '2026-07-25 03:00:00 +0200', Min: 45, Avg: 48, Max: 52 },
+              { date: '2026-07-25 09:00:00 +0200', Min: 62, Avg: 74, Max: 110 },
+              { date: '2026-07-25 15:00:00 +0200', Min: 68, Avg: 82, Max: 140 },
+            ],
+          },
+        ],
+      },
+    })!
+    expect(valeurAuJour(r.series.fc_nuit!, '2026-07-25')).toBe(45)
+  })
+})

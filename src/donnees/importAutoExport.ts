@@ -66,6 +66,8 @@ export function importerAutoExport(brut: unknown): ResultatSante | null {
   /** id → jour → valeurs (mode médiane) ou total (mode somme). */
   const valeurs = new Map<string, Map<Jour, number[]>>()
   const totaux = new Map<string, Map<Jour, number>>()
+  /** FC nocturne : minimum du jour, jamais une médiane (cf. bloc heart_rate). */
+  const nadirFc = new Map<Jour, number>()
 
   const nuits: {
     jour: Jour
@@ -106,21 +108,17 @@ export function importerAutoExport(brut: unknown): ResultatSante | null {
     }
 
     if (nom === 'heart_rate') {
-      // L'agrégat quotidien porte Min / Avg / Max ; le minimum du jour est
-      // presque toujours le nadir de sommeil — même série que l'export XML.
+      // L'agrégat porte Min / Avg / Max — par jour ou PAR HEURE selon les
+      // réglages de l'app. Le nadir de sommeil est le minimum du JOUR : une
+      // médiane de minima horaires serait dominée par les heures d'éveil.
+      // Même règle que l'export XML (cf. importSante).
       for (const p of metrique.data as unknown[]) {
         lus++
         if (!estObjet(p) || typeof p.Min !== 'number' || !Number.isFinite(p.Min)) continue
         const jour = jourDe(p.date)
         if (!jour) continue
-        let parJour = valeurs.get('fc_nuit')
-        if (!parJour) {
-          parJour = new Map()
-          valeurs.set('fc_nuit', parJour)
-        }
-        const liste = parJour.get(jour)
-        if (liste) liste.push(p.Min)
-        else parJour.set(jour, [p.Min])
+        const actuel = nadirFc.get(jour)
+        if (actuel === undefined || p.Min < actuel) nadirFc.set(jour, p.Min)
         retenus++
       }
       continue
@@ -194,6 +192,7 @@ export function importerAutoExport(brut: unknown): ResultatSante | null {
   for (const [id, parJour] of totaux) {
     poser(id, [...parJour].map(([j, v]) => ({ j, v })))
   }
+  poser('fc_nuit', [...nadirFc].map(([j, v]) => ({ j, v })))
 
   /* — Nuits : plusieurs sessions le même jour se somment (durée), le coucher
        de la session la plus longue est retenu — même règle que l'export XML — */
