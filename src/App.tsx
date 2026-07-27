@@ -1,10 +1,12 @@
 import {
+  Component,
   lazy,
   Suspense,
   useEffect,
   useRef,
   type ComponentType,
   type LazyExoticComponent,
+  type ReactNode,
 } from 'react'
 import { storeDonnees } from './core/donneesStore'
 import { useFenetres, usePersistance } from './core/hooks'
@@ -137,9 +139,11 @@ function Shell({ bloque }: { bloque: boolean }) {
           const Composant = COMPOSANTS[f.id]
           return (
             <FenetreFlottante key={f.id} fenetre={f}>
-              <Suspense fallback={<Chargement />}>
-                <Composant />
-              </Suspense>
+              <GardeFenetre>
+                <Suspense fallback={<Chargement />}>
+                  <Composant />
+                </Suspense>
+              </GardeFenetre>
             </FenetreFlottante>
           )
         })}
@@ -155,6 +159,31 @@ function Shell({ bloque }: { bloque: boolean }) {
 
 function Chargement() {
   return <div className="grid h-full place-items-center text-[11px] text-attenue">…</div>
+}
+
+/**
+ * Garde par fenêtre : un module qui ne charge pas (coupure réseau, fichiers
+ * renommés par un déploiement pendant qu'un onglet restait ouvert) ou une
+ * erreur de rendu ne doit condamner QUE sa fenêtre — sans elle, React
+ * démonterait tout l'arbre, y compris les fenêtres déjà vivantes.
+ */
+class GardeFenetre extends Component<{ children: ReactNode }, { erreur: boolean }> {
+  state = { erreur: false }
+
+  static getDerivedStateFromError() {
+    return { erreur: true }
+  }
+
+  render() {
+    if (this.state.erreur) {
+      return (
+        <div className="grid h-full place-items-center p-6 text-center text-[12px] text-attenue">
+          Cette fenêtre n’a pas pu charger. Recharge l’application pour réessayer.
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 function EcranVide() {
