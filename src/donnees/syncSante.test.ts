@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fichiersAImporter } from './syncSante'
+import { ErreurFusionRefusee, fichiersAImporter, importerFichier } from './syncSante'
 
 describe('fichiersAImporter', () => {
   const f = (nom: string, m: number, t = 100) => ({ nom, lastModified: m, taille: t })
@@ -21,5 +21,32 @@ describe('fichiersAImporter', () => {
     const vus = { 'a.json': { m: 100, t: 100 } }
     expect(fichiersAImporter([f('a.json', 250)], vus)).toHaveLength(1)
     expect(fichiersAImporter([f('a.json', 100, 180)], vus)).toHaveLength(1)
+  })
+})
+
+describe('importerFichier', () => {
+  it('signale une fusion refusée au lieu d’annoncer un succès', async () => {
+    // Dans ce processus de test, storeDonnees n’est jamais hydraté : la
+    // persistance n’est pas prête — le cas d’un onglet en conflit ou en
+    // erreur d’écriture. L’import ne doit PAS passer pour un succès, sans
+    // quoi le balayage marquerait le fichier « vu » et ne le relirait jamais.
+    const fichier = new File(
+      [
+        JSON.stringify({
+          data: {
+            metrics: [
+              {
+                name: 'weight_body_mass',
+                units: 'kg',
+                data: [{ date: '2026-07-26 08:00:00 +0200', qty: 74 }],
+              },
+            ],
+          },
+        }),
+      ],
+      'export.json',
+      { type: 'application/json' },
+    )
+    await expect(importerFichier(fichier)).rejects.toBeInstanceOf(ErreurFusionRefusee)
   })
 })

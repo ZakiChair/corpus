@@ -46,11 +46,12 @@ export interface EtatStore {
   retirerMesure: (id: string, j: Jour) => void
   ajouterAnnotation: (a: Omit<Annotation, 'id'>) => void
   supprimerAnnotation: (id: string) => void
+  /** Rend faux si la persistance n'est pas prête : rien n'a été appliqué. */
   fusionner: (
     series: Record<string, Serie>,
     annotations?: Annotation[],
     profil?: Partial<Profil>,
-  ) => void
+  ) => boolean
   genererDemonstration: (jours?: number) => void
   reinitialiser: () => Promise<boolean>
 }
@@ -133,11 +134,12 @@ export function creerStoreDonnees(
       }, delaiEnregistrement)
     }
 
-    function muter(transformation: (etat: EtatCorpus) => EtatCorpus): void {
-      if (get().persistance.statut !== 'pret') return
+    function muter(transformation: (etat: EtatCorpus) => EtatCorpus): boolean {
+      if (get().persistance.statut !== 'pret') return false
       const suivant = transformation(get().etat)
       set({ etat: suivant, vide: estVide(suivant) })
       enregistrerPlusTard(suivant)
+      return true
     }
 
     const etatInitial = etatVide(aujourdhui())

@@ -370,3 +370,15 @@ describe('file d’écriture et effacement', () => {
     expect(await memoire.charger()).toEqual({ statut: 'absent', revision: 2 })
   })
 })
+
+describe('fusion et persistance bloquée', () => {
+  it('fusionner signale un refus tant que la persistance n’est pas prête', async () => {
+    const bloque = creerStoreDonnees(adaptateurEnErreur())
+    expect(bloque.getState().fusionner({ poids: [{ j: JOUR, v: 72 }] })).toBe(false)
+
+    const memoire = new StockageMemoire()
+    const store = creerStoreDonnees(memoire, { delaiEcritureMs: 60_000 })
+    await store.getState().hydrater()
+    expect(store.getState().fusionner({ poids: [{ j: JOUR, v: 72 }] })).toBe(true)
+  })
+})

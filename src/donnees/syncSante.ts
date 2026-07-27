@@ -118,19 +118,34 @@ async function lireVus(): Promise<Record<string, FichierVu>> {
   }
 }
 
+/**
+ * La fusion a été refusée parce que la persistance n'est pas prête (conflit
+ * entre onglets, erreur d'écriture…). C'est transitoire : le fichier ne doit
+ * PAS être marqué « vu », sinon il ne serait plus jamais réimporté.
+ */
+export class ErreurFusionRefusee extends Error {
+  constructor() {
+    super('Persistance indisponible : import non appliqué, il sera retenté.')
+    this.name = 'ErreurFusionRefusee'
+  }
+}
+
 /** Importe un fichier selon son extension ; rend un résumé pour le journal. */
-async function importerFichier(fichier: File): Promise<string> {
+export async function importerFichier(fichier: File): Promise<string> {
   const nom = fichier.name.toLowerCase()
   const { fusionner } = storeDonnees.getState()
+  const appliquer = (ok: boolean): void => {
+    if (!ok) throw new ErreurFusionRefusee()
+  }
 
   if (nom.endsWith('.zip') || nom.endsWith('.xml')) {
     const r = await importerSante(fichier, fichier.name)
-    fusionner(r.series, r.annotations, r.profil)
+    appliquer(fusionner(r.series, r.annotations, r.profil))
     return `${Object.keys(r.series).length} séries`
   }
   if (nom.endsWith('.csv')) {
     const r = importerCsv(await fichier.text())
-    fusionner(r.series)
+    appliquer(fusionner(r.series))
     return `${Object.keys(r.series).length} séries`
   }
   // JSON : Health Auto Export ou profil ATHLOS. Une sauvegarde CORPUS déposée
@@ -142,12 +157,12 @@ async function importerFichier(fichier: File): Promise<string> {
   }
   if (estAutoExport(brut)) {
     const r = importerAutoExport(brut)!
-    fusionner(r.series, r.annotations)
+    appliquer(fusionner(r.series, r.annotations))
     return `${Object.keys(r.series).length} séries, ${r.annotations.length} séances`
   }
   const athlos = importerAthlos(brut)
   if (athlos) {
-    fusionner(athlos.series, athlos.annotations)
+    appliquer(fusionner(athlos.series, athlos.annotations))
     return `profil ATHLOS, ${Object.keys(athlos.series).length} séries`
   }
   return 'JSON non reconnu, ignoré'
@@ -178,6 +193,12 @@ async function balayer(): Promise<void> {
         dernierImport = `${meta.nom} — ${resume}, ${heure()}`
         storeSync.setState({ erreur: undefined })
       } catch (err) {
+        // Fusion refusée : la persistance est bloquée pour tout le balayage,
+        // on s'arrête SANS marquer le fichier — il sera retenté plus tard.
+        if (err instanceof ErreurFusionRefusee) {
+          storeSync.setState({ erreur: err.message })
+          break
+        }
         // Marqué comme vu malgré l'échec : sans cela le même fichier illisible
         // serait retenté — et échouerait — à chaque balayage.
         storeSync.setState({ erreur: `${meta.nom} : ${(err as Error).message}` })
